@@ -32,4 +32,7 @@ public class DatabaseNode extends PanacheEntityBase {
     @Column(name = "replication_paused_at") public Instant replicationPausedAt;
     @Column(name = "replication_paused_by") public String replicationPausedBy;
     @Column(name = "replication_pause_reason") public String replicationPauseReason;
+    /** Ancien primaire isolé après une bascule d'urgence : à reconstruire avant réintégration. */
+    @Column(name = "fence_required") public boolean fenceRequired;
+    @Column(name = "fence_reason") public String fenceReason;
 }

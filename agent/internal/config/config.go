@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/airm5500/prestige-replica-manager/agent/internal/router"
 	"os"
 	"strings"
 	"time"
@@ -43,6 +44,8 @@ type Config struct {
 	Provisioning ProvisioningConfig `json:"provisioning"`
 	// Lot 3 : pause/reprise, bascule planifiée, rattachement à une nouvelle source.
 	ReplicationControl ReplicationControlConfig `json:"replicationControl"`
+	// Lot 4 : routeur de connexion (adresse stable pour Prestige).
+	Router router.Config `json:"router"`
 }
 
 // ReplicationControlConfig autorise le pilotage de la réplication de CE serveur
@@ -206,6 +209,14 @@ func (c *Config) Validate() error {
 	if c.Provisioning.Enabled && (c.Provisioning.DataDir == "" || c.Provisioning.AdminUser == "" || c.Provisioning.ReplicationUser == "" ||
 		c.Backup.Root == "" || c.Backup.EncryptionKeyFile == "") {
 		return errors.New("provisioning : dataDir, adminUser, replicationUser, backup.root et backup.encryptionKeyFile sont obligatoires")
+	}
+	if c.Router.Enabled {
+		if c.Router.User == "" {
+			c.Router.User, c.Router.PasswordFile = c.MariaDB.User, c.MariaDB.PasswordFile
+		}
+		if err := c.Router.Validate(); err != nil {
+			return err
+		}
 	}
 	rc := &c.ReplicationControl
 	if rc.AdminUser == "" {

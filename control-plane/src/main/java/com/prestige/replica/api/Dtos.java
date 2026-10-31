@@ -55,7 +55,8 @@ public final class Dtos {
                               Long serverId, Boolean readOnly, String gtidCurrentPos, String gtidSlavePos,
                               List<ChannelView> channels, Double minDiskFreePct, String agentVersion, String agentTokenPrefix,
                               long openIncidents, String worstSeverity, List<String> capabilities,
-                              Instant replicationPausedAt, String replicationPausedBy, String replicationPauseReason) {}
+                              Instant replicationPausedAt, String replicationPausedBy, String replicationPauseReason,
+                              boolean fenceRequired, String fenceReason, com.fasterxml.jackson.databind.JsonNode router) {}
 
     public record TopologySummary(UUID id, String name, String mode, boolean maintenance, String status,
                                   String primary, Long rpoSecondsEstimate, List<NodeSummary> nodes) {}

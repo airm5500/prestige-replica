@@ -45,6 +45,8 @@ type Collector struct {
 	ExtraDiskPaths []string
 	Timeout        time.Duration
 	Capabilities   []string
+	// RouterStatus : état du routeur intégré, s'il est actif.
+	RouterStatus func() any
 }
 
 // Collect construit un rapport. Il ne renvoie jamais d'erreur : les problèmes
@@ -62,6 +64,9 @@ func (c *Collector) Collect(ctx context.Context) report.Report {
 		Disks:         []report.Disk{},
 		Errors:        []string{},
 		Capabilities:  c.Capabilities,
+	}
+	if c.RouterStatus != nil {
+		r.Router = c.RouterStatus()
 	}
 	timeout := c.Timeout
 	if timeout <= 0 {

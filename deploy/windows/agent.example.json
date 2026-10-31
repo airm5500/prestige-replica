@@ -40,5 +40,17 @@
     "replicationUser": "prm_repl",
     "replicationPasswordFile": "C:\\ProgramData\\PrestigeReplicaManager\\repl.password",
     "protectedUsers": []
+  },
+  "router": {
+    "enabled": false,
+    "listen": "127.0.0.1:3310",
+    "targets": [
+      "192.168.1.10:3306",
+      "192.168.1.11:3306"
+    ],
+    "user": "prm_monitor",
+    "passwordFile": "C:\\ProgramData\\PrestigeReplicaManager\\mariadb.password",
+    "probeIntervalMs": 1000,
+    "failuresBeforeDown": 2
   }
 }

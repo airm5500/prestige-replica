@@ -39,6 +39,9 @@ public class OperationResource {
                                 String siteName, String topologyName, List<OperationView> steps) {}
     public record PauseIn(@Pattern(regexp = "ALL|SQL") String mode, @NotBlank @Size(max = 300) String reason) {}
     public record SwitchoverPlanIn(@NotNull UUID targetNodeId) {}
+    public record FailoverPlanIn(UUID targetNodeId) {}
+    public record FailoverIn(UUID targetNodeId, boolean fencingConfirmed, @NotBlank String topologyConfirmation) {}
+    public record ManualFailoverIn(@NotNull UUID newPrimaryNodeId, @NotBlank String topologyConfirmation) {}
     public record SwitchoverIn(@NotNull UUID targetNodeId, boolean reattachOldPrimary, @NotBlank String topologyConfirmation) {}
 
     static final String[] OPERATORS = {Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN};
@@ -126,6 +129,21 @@ public class OperationResource {
     @GET @Path("/nodes/{id}/repair-plan") @Transactional
     public ReplicationService.RepairPlan repairPlan(@PathParam("id") UUID id) {
         return replication.repairPlan(node(id), Instant.now());
+    }
+
+    @POST @Path("/topologies/{id}/failover/plan") @Transactional
+    public ReplicationService.FailoverPlan failoverPlan(@PathParam("id") UUID id, FailoverPlanIn in) {
+        return replication.failoverPlan(topology(id), in == null ? null : in.targetNodeId(), java.time.Instant.now(), null);
+    }
+
+    @POST @Path("/topologies/{id}/failover") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN})
+    public Operation failover(@PathParam("id") UUID id, @Valid FailoverIn in) {
+        return replication.requestFailover(topology(id), in.targetNodeId(), in.fencingConfirmed(), in.topologyConfirmation(), me.username());
+    }
+
+    @POST @Path("/topologies/{id}/failover/declare-manual") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.SITE_ADMIN})
+    public void declareManual(@PathParam("id") UUID id, @Valid ManualFailoverIn in) {
+        replication.declareManualFailover(topology(id), node(in.newPrimaryNodeId()), in.topologyConfirmation(), me.username());
     }
 
     @POST @Path("/topologies/{id}/switchover/plan") @Transactional

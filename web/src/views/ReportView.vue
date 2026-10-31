@@ -31,12 +31,13 @@ const all = computed(() => (view.value ? [view.value, ...view.value.steps] : [])
         <tr><th>Demandée</th><td>{{ op.requestedBy }}, {{ date(op.requestedAt) }}</td></tr>
         <tr v-if="op.requiresApproval"><th>Approuvée</th><td>{{ op.approvedBy ? `${op.approvedBy}, ${date(op.approvedAt)}` : 'non approuvée' }}</td></tr>
         <tr><th>Exécution</th><td>{{ date(op.startedAt) }} → {{ date(op.finishedAt) }}</td></tr>
-        <template v-if="op.type === 'SWITCHOVER' && result">
+        <template v-if="(op.type === 'SWITCHOVER' || op.type === 'FAILOVER') && result">
           <tr><th>Primaire après l'opération</th><td class="mono">{{ result.newPrimary }}</td></tr>
-          <tr><th>Écritures interrompues</th><td>{{ result.writeUnavailableMs != null ? `${(result.writeUnavailableMs / 1000).toFixed(1).replace('.', ',')} s` : '—' }}</td></tr>
+          <tr><th>{{ op.type === 'FAILOVER' ? 'Durée sans primaire (depuis le lancement)' : 'Écritures interrompues' }}</th><td>{{ result.writeUnavailableMs != null ? `${(result.writeUnavailableMs / 1000).toFixed(1).replace('.', ',')} s` : '—' }}</td></tr>
           <tr><th>Durée totale</th><td>{{ duration(result.totalSeconds) }}</td></tr>
-          <tr><th>Dernière transaction de l'ancien primaire</th><td class="mono">{{ result.finalGtid ?? '—' }}</td></tr>
-          <tr><th>Transactions perdues</th><td>{{ result.newPrimaryGtid ? 'aucune : la nouvelle source a appliqué cette position avant d\'être ouverte en écriture' : '—' }}</td></tr>
+          <tr v-if="op.type === 'SWITCHOVER'"><th>Dernière transaction de l'ancien primaire</th><td class="mono">{{ result.finalGtid ?? '—' }}</td></tr>
+          <tr v-if="op.type === 'FAILOVER'"><th>Perte estimée</th><td>{{ result.lossEstimate ?? '—' }}</td></tr>
+          <tr v-else><th>Transactions perdues</th><td>{{ result.newPrimaryGtid ? 'aucune : la nouvelle source a appliqué cette position avant d\'être ouverte en écriture' : '—' }}</td></tr>
         </template>
       </tbody>
     </table>

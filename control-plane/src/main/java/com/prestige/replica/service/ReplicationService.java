@@ -67,6 +67,7 @@ public class ReplicationService {
     @Transactional(Transactional.TxType.MANDATORY)
     public Operation attach(DatabaseNode node, DatabaseNode primary, String[] hostPort, String actor) {
         if (node.id.equals(primary.id)) throw new BadRequestException("Un primaire ne se rattache pas à lui-même");
+        if (node.fenceRequired) throw new BadRequestException(node.name + " a été isolé lors d'une bascule d'urgence : reconstruisez-le depuis une sauvegarde");
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("sourceHost", hostPort[0]);
         p.put("sourcePort", Integer.parseInt(hostPort[1]));
@@ -91,6 +92,12 @@ public class ReplicationService {
         RepairAction rebuild = new RepairAction("REBUILD", "Reconstruire depuis une sauvegarde vérifiée",
                 backups.isEmpty() ? "Aucune sauvegarde vérifiée encore couverte par les binlogs du primaire : sauvegardez puis testez la restauration d'abord."
                         : "Remplace les données de la réplique par la dernière sauvegarde vérifiée puis rattrape le primaire. Double approbation.", false);
+        if (node.fenceRequired) {
+            return new RepairPlan("Ancien primaire isolé après une bascule d'urgence",
+                    "Il peut contenir des transactions jamais reçues par le nouveau primaire : il doit être reconstruit depuis une sauvegarde, jamais rattaché tel quel. "
+                            + nz(node.fenceReason),
+                    List.of(new RepairAction(rebuild.id(), rebuild.label(), rebuild.detail(), true)), backups);
+        }
         if (r == null || !r.reachable()) {
             return new RepairPlan("Réplique injoignable", "L'agent ne joint pas MariaDB ou n'envoie plus de rapport : vérifiez le service MariaDB et l'agent sur la machine.",
                     List.of(), backups);
@@ -284,6 +291,10 @@ public class ReplicationService {
     /** Appelée à l'approbation : nouveaux contrôles sur l'état le plus récent, puis étape 1. */
     @Transactional(Transactional.TxType.MANDATORY)
     public void start(Operation parent) {
+        if (parent.type == OperationType.FAILOVER) {
+            startFailover(parent);
+            return;
+        }
         JsonNode p = ops.read(parent.params);
         Topology t = Topology.findById(parent.topologyId);
         DatabaseNode target = DatabaseNode.findById(UUID.fromString(p.path("targetId").asText()));
@@ -312,6 +323,10 @@ public class ReplicationService {
     public void onChildFinished(Operation child) {
         Operation parent = Operation.findById(child.parentId);
         if (parent == null || parent.status.terminal()) return;
+        if (parent.type == OperationType.FAILOVER) {
+            onFailoverChild(parent, child);
+            return;
+        }
         parent.lastEventAt = Instant.now();
         ObjectNode p = (ObjectNode) ops.read(parent.params);
         Topology t = Topology.findById(parent.topologyId);
@@ -408,15 +423,300 @@ public class ReplicationService {
         if (t != null && p.has("maintenanceBefore")) t.maintenance = p.path("maintenanceBefore").asBoolean(false);
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("finalGtid", p.path("finalGtid").asText(null));
+        if (p.has("lossEstimate")) res.put("lossEstimate", p.path("lossEstimate").asText());
         res.put("newPrimaryGtid", p.path("newPrimaryGtid").asText(null));
         if (p.has("writeUnavailableMs")) res.put("writeUnavailableMs", p.path("writeUnavailableMs").asLong());
         res.put("totalSeconds", parent.startedAt == null ? null : Duration.between(parent.startedAt, parent.finishedAt).toSeconds());
         res.put("newPrimary", st == OperationStatus.SUCCEEDED || p.has("newPrimaryGtid") ? p.path("newAddress").asText() : p.path("oldAddress").asText());
         parent.result = ops.write(res);
         ops.event(parent, st == OperationStatus.SUCCEEDED ? "INFO" : "ERROR",
-                st == OperationStatus.SUCCEEDED ? "Bascule terminée avec succès" : error);
-        audit.record("system", "SWITCHOVER_" + st, "operation:" + parent.id, st == OperationStatus.SUCCEEDED ? "SUCCESS" : "FAILURE",
+                st == OperationStatus.SUCCEEDED ? (parent.type == OperationType.FAILOVER ? "Bascule d'urgence terminée" : "Bascule terminée avec succès") : error);
+        audit.record("system", (parent.type == OperationType.FAILOVER ? "FAILOVER_" : "SWITCHOVER_") + st, "operation:" + parent.id, st == OperationStatus.SUCCEEDED ? "SUCCESS" : "FAILURE",
                 parent.tenantId, parent.siteId, parent.summary + (error == null ? "" : " — " + error));
+    }
+
+    // ---- Bascule d'urgence (Lot 4) -------------------------------------------
+
+    static final Duration PRIMARY_LOST_AFTER = Duration.ofSeconds(60);
+
+    public record FailoverPlan(boolean ready, List<Check> checks, String oldPrimary, UUID targetId, String target,
+                               boolean oldAgentAlive, boolean manualFencingRequired, String lossEstimate, List<String> repointed) {}
+
+    /** Plus grand numéro de séquence GTID du domaine dans une liste « d-s-n,... ». */
+    static long seq(String gtidList, long domain) {
+        long best = -1;
+        if (gtidList == null) return best;
+        for (String g : gtidList.split(",")) {
+            String[] p = g.trim().split("-");
+            if (p.length == 3) {
+                try {
+                    if (Long.parseLong(p[0]) == domain) best = Math.max(best, Long.parseLong(p[2]));
+                } catch (NumberFormatException ignored) { }
+            }
+        }
+        return best;
+    }
+
+    @Transactional(Transactional.TxType.MANDATORY)
+    public FailoverPlan failoverPlan(Topology t, UUID requestedTarget, Instant now, UUID exclude) {
+        List<Check> checks = new ArrayList<>();
+        List<DatabaseNode> nodes = DatabaseNode.list("topologyId", t.id);
+        DatabaseNode old = nodes.stream().filter(n -> n.expectedRole == NodeRole.PRIMARY).findFirst().orElse(null);
+        if (old == null) {
+            checks.add(fail("primary", "Aucun primaire déclaré dans la topologie"));
+            return new FailoverPlan(false, checks, null, null, null, false, false, null, List.of());
+        }
+        AgentReport ro = monitoring.parse(old.lastReport);
+        boolean silent = old.lastReportAt == null || Duration.between(old.lastReportAt, now).compareTo(PRIMARY_LOST_AFTER) > 0;
+        boolean down = ro != null && !ro.reachable();
+        if (!silent && !down) {
+            checks.add(fail("primary-alive", old.name + " répond normalement : utilisez la bascule planifiée, sans perte"));
+        } else {
+            checks.add(ok("primary-lost", old.name + (down ? " : MariaDB injoignable d'après son agent" : " : aucun rapport depuis "
+                    + (old.lastReportAt == null ? "toujours" : Duration.between(old.lastReportAt, now).toSeconds() + " s"))));
+        }
+        boolean agentAlive = old.lastSeenAt != null && Duration.between(old.lastSeenAt, now).compareTo(PRIMARY_LOST_AFTER) <= 0;
+        if (agentAlive) checks.add(ok("fence", "L'agent de " + old.name + " répond : il isolera le serveur (lecture seule ou arrêt du service) avant la promotion"));
+        else checks.add(warn("fence", "Machine " + old.name + " injoignable : vous devrez confirmer l'avoir éteinte ou débranchée du réseau. "
+                + "Le routeur de connexion refusera de toute façon d'écrire si elle revenait en écriture."));
+
+        long domain = ro != null && ro.server() != null ? ro.server().gtidDomainId() : 0;
+        DatabaseNode best = null;
+        long bestSeq = -2;
+        Map<UUID, Long> received = new HashMap<>();
+        for (DatabaseNode n : nodes) {
+            if (n.expectedRole != NodeRole.REPLICA) continue;
+            AgentReport r = monitoring.parse(n.lastReport);
+            boolean fresh = r != null && r.reachable() && n.lastReportAt != null && Duration.between(n.lastReportAt, now).compareTo(REPORT_FRESHNESS) <= 0;
+            AgentReport.Channel c = r == null || r.channelsOrEmpty().isEmpty() ? null : r.channelsOrEmpty().get(0);
+            if (!fresh || c == null || c.lastSqlErrno() != 0 || !r.capabilitiesOrEmpty().contains("replicationControl")) continue;
+            long sq = seq(c.gtidIoPos(), domain);
+            received.put(n.id, sq);
+            if (sq > bestSeq) { bestSeq = sq; best = n; }
+        }
+        DatabaseNode target = requestedTarget == null ? best : DatabaseNode.findById(requestedTarget);
+        if (target == null || !t.id.equals(target.topologyId) || !received.containsKey(target.id)) {
+            checks.add(fail("target", target == null ? "Aucune réplique saine et pilotable pour reprendre le service"
+                    : target.name + " ne peut pas être promue (rapport absent ou ancien, erreur SQL, ou pilotage non autorisé)"));
+            return new FailoverPlan(false, checks, old.name, null, null, agentAlive, !agentAlive, null, List.of());
+        }
+        AgentReport rt = monitoring.parse(target.lastReport);
+        if (rt.server() == null || !rt.server().logBin()) checks.add(fail("target-binlog", target.name + " : journal binaire désactivé"));
+        try {
+            BackupService.hostPort(target.addressLabel);
+        } catch (BadRequestException e) {
+            checks.add(fail("target-address", "Renseignez l'adresse hôte:port de " + target.name));
+        }
+        long tseq = received.get(target.id);
+        if (best != null && !best.id.equals(target.id) && bestSeq > tseq) {
+            checks.add(warn("target-best", best.name + " a reçu davantage de transactions (" + bestSeq + " contre " + tseq + ") : la choisir réduirait la perte"));
+        } else {
+            checks.add(ok("target", target.name + " est la réplique la plus avancée (position reçue " + rt.channelsOrEmpty().get(0).gtidIoPos() + ")"));
+        }
+        String loss;
+        // Dernière position connue du primaire : son dernier rapport, sinon la dernière mesure où MariaDB répondait.
+        String lastPos = ro == null || ro.server() == null ? null : ro.server().gtidBinlogPos();
+        Instant lastAt = old.lastReportAt;
+        if (lastPos == null) {
+            com.prestige.replica.domain.NodeMetric m = com.prestige.replica.domain.NodeMetric
+                    .<com.prestige.replica.domain.NodeMetric>find("nodeId = ?1 and gtidCurrentPos is not null order by collectedAt desc", old.id).firstResult();
+            if (m != null) { lastPos = m.gtidCurrentPos; lastAt = m.collectedAt; }
+        }
+        long last = seq(lastPos, domain);
+        String when = lastAt == null ? "inconnue" : "relevée il y a " + Duration.between(lastAt, now).toSeconds() + " s";
+        if (last < 0) loss = "Inconnue : aucune position connue du primaire.";
+        else if (last > tseq) loss = "Au moins " + (last - tseq) + " transaction(s) du primaire non reçues par " + target.name + " (dernière position du primaire " + when + ") ; d'autres ont pu être écrites ensuite.";
+        else loss = "Aucune transaction manquante parmi celles connues (dernière position du primaire " + when + ") ; celles écrites après ce relevé et non transmises seraient perdues.";
+        checks.add(warn("loss", loss));
+        List<UUID> ids = nodes.stream().map(n -> n.id).toList();
+        long active = Operation.count("nodeId in ?1 and status in ?2 and id <> ?3", ids,
+                List.of(OperationStatus.AWAITING_APPROVAL, OperationStatus.QUEUED, OperationStatus.RUNNING), exclude == null ? new UUID(0, 0) : exclude);
+        if (active > 0) checks.add(fail("busy", active + " opération(s) en attente ou en cours dans la topologie : annulez-les d'abord"));
+        List<String> repointed = nodes.stream().filter(n -> !n.id.equals(target.id) && !n.id.equals(old.id) && n.expectedRole != NodeRole.STANDALONE)
+                .map(n -> n.name).toList();
+        boolean ready = checks.stream().noneMatch(c -> c.status().equals("FAIL"));
+        return new FailoverPlan(ready, checks, old.name, target.id, target.name, agentAlive, !agentAlive, loss, repointed);
+    }
+
+    @Transactional(Transactional.TxType.MANDATORY)
+    public Operation requestFailover(Topology t, UUID targetId, boolean fencingConfirmed, String topologyConfirmation, String actor) {
+        if (topologyConfirmation == null || !t.name.equals(topologyConfirmation.trim())) {
+            throw new BadRequestException("Saisissez exactement le nom de la topologie pour confirmer");
+        }
+        FailoverPlan p = failoverPlan(t, targetId, Instant.now(), null);
+        if (!p.ready()) {
+            throw new BadRequestException("Bascule d'urgence impossible : " + String.join(" ; ",
+                    p.checks().stream().filter(c -> c.status().equals("FAIL")).map(Check::message).toList()));
+        }
+        if (p.manualFencingRequired() && !fencingConfirmed) {
+            throw new BadRequestException("Confirmez que l'ancien primaire est éteint ou débranché du réseau");
+        }
+        DatabaseNode old = DatabaseNode.find("topologyId = ?1 and expectedRole = ?2", t.id, NodeRole.PRIMARY).firstResult();
+        DatabaseNode target = DatabaseNode.findById(p.targetId());
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("oldPrimaryId", old.id.toString());
+        params.put("targetId", target.id.toString());
+        params.put("fencingConfirmed", fencingConfirmed);
+        params.put("lossEstimate", p.lossEstimate());
+        params.put("oldAddress", old.addressLabel);
+        params.put("newAddress", target.addressLabel);
+        return ops.request(OperationType.FAILOVER, target, params, "Bascule d'urgence : " + old.name + " perdu → " + target.name + " (" + t.name + ")", actor);
+    }
+
+    private void startFailover(Operation parent) {
+        ObjectNode p = (ObjectNode) ops.read(parent.params);
+        Topology t = Topology.findById(parent.topologyId);
+        DatabaseNode old = DatabaseNode.findById(UUID.fromString(p.path("oldPrimaryId").asText()));
+        DatabaseNode target = DatabaseNode.findById(UUID.fromString(p.path("targetId").asText()));
+        parent.status = OperationStatus.RUNNING;
+        parent.startedAt = Instant.now();
+        parent.lastEventAt = parent.startedAt;
+        FailoverPlan plan = failoverPlan(t, target.id, Instant.now(), parent.id);
+        if (!plan.ready() || (plan.manualFencingRequired() && !p.path("fencingConfirmed").asBoolean(false))) {
+            finish(parent, OperationStatus.FAILED, "Contrôles au moment de l'exécution non satisfaits, rien n'a été modifié : "
+                    + String.join(" ; ", plan.checks().stream().filter(c -> c.status().equals("FAIL")).map(Check::message).toList())
+                    + (plan.manualFencingRequired() && !p.path("fencingConfirmed").asBoolean(false) ? " ; isolement manuel non confirmé" : ""), t);
+            return;
+        }
+        p.put("maintenanceBefore", t.maintenance);
+        p.put("lossEstimate", plan.lossEstimate());
+        parent.params = ops.write(p);
+        t.maintenance = true;
+        old.fenceRequired = true;
+        old.fenceReason = "Isolé par la bascule d'urgence du " + parent.startedAt.toString().substring(0, 16).replace('T', ' ') + " UTC";
+        ops.event(parent, "WARN", "Perte estimée : " + plan.lossEstimate());
+        if (plan.oldAgentAlive()) {
+            ops.event(parent, "INFO", "Étape 1 : isolement de " + old.name + " par son agent");
+            ops.requestChild(parent, OperationType.FENCE, old, Map.of("stopService", true), "Isoler " + old.name + " (lecture seule ou arrêt du service)");
+        } else {
+            ops.event(parent, "WARN", "Étape 1 : isolement de " + old.name + " confirmé manuellement par " + parent.requestedBy + " (machine injoignable)");
+            promoteForFailover(parent, target);
+        }
+    }
+
+    private void promoteForFailover(Operation parent, DatabaseNode target) {
+        ops.event(parent, "INFO", "Étape 2 : promotion de " + target.name + " après application de tout ce qu'elle a reçu");
+        ops.requestChild(parent, OperationType.SWITCHOVER_PROMOTE, target, Map.of("waitRelay", true, "timeoutSeconds", 120),
+                "Appliquer les transactions reçues puis promouvoir " + target.name);
+    }
+
+    private void onFailoverChild(Operation parent, Operation child) {
+        parent.lastEventAt = Instant.now();
+        ObjectNode p = (ObjectNode) ops.read(parent.params);
+        Topology t = Topology.findById(parent.topologyId);
+        DatabaseNode target = DatabaseNode.findById(UUID.fromString(p.path("targetId").asText()));
+        DatabaseNode old = DatabaseNode.findById(UUID.fromString(p.path("oldPrimaryId").asText()));
+        JsonNode result = ops.read(child.result);
+        boolean ok = child.status == OperationStatus.SUCCEEDED;
+        switch (child.type) {
+            case FENCE -> {
+                if (ok) {
+                    ops.event(parent, "INFO", old.name + " isolé" + (result.path("serviceStopped").asBoolean(false) ? " (service MariaDB arrêté)"
+                            : result.path("readOnly").asBoolean(false) ? " (lecture seule, " + result.path("killedConnections").asInt() + " connexion(s) coupée(s))" : ""));
+                    promoteForFailover(parent, target);
+                } else if (p.path("fencingConfirmed").asBoolean(false)) {
+                    ops.event(parent, "WARN", "Isolement automatique impossible (" + child.error + ") ; poursuite sur la base de la confirmation manuelle");
+                    promoteForFailover(parent, target);
+                } else {
+                    old.fenceRequired = false;
+                    old.fenceReason = null;
+                    finish(parent, OperationStatus.FAILED, "Isolement de " + old.name + " impossible : " + child.error
+                            + ". Rien n'a été modifié sur les répliques. Éteignez ou débranchez la machine puis relancez en confirmant l'isolement.", t);
+                }
+            }
+            case SWITCHOVER_PROMOTE -> {
+                if (!ok) {
+                    finish(parent, OperationStatus.INTERVENTION_REQUIRED, "Promotion de " + target.name + " impossible : " + child.error
+                            + ". " + old.name + " est isolé : aucun serveur n'accepte les écritures. Procédure manuelle : docs/procedure-urgence.md", t);
+                    return;
+                }
+                old.expectedRole = NodeRole.REPLICA;
+                target.expectedRole = NodeRole.PRIMARY;
+                if (t.backupNodeId != null && t.backupNodeId.equals(target.id)) t.backupNodeId = null;
+                p.put("newPrimaryGtid", result.path("gtid").asText(""));
+                p.put("writeUnavailableMs", parent.startedAt == null ? 0 : Duration.between(parent.startedAt, child.finishedAt).toMillis());
+                parent.params = ops.write(p);
+                ops.event(parent, "INFO", target.name + " est le nouveau primaire (position " + result.path("gtid").asText("") + ")");
+                ops.event(parent, "WARN", old.name + " devra être reconstruit depuis une sauvegarde avant de redevenir réplique (jamais rattaché tel quel)");
+                String[] hp = BackupService.hostPort(target.addressLabel);
+                int attached = 0;
+                for (DatabaseNode n : DatabaseNode.<DatabaseNode>list("topologyId", t.id)) {
+                    if (n.id.equals(target.id) || n.id.equals(old.id) || n.expectedRole == NodeRole.STANDALONE) continue;
+                    Map<String, Object> ap = new LinkedHashMap<>();
+                    ap.put("sourceHost", hp[0]);
+                    ap.put("sourcePort", Integer.parseInt(hp[1]));
+                    ops.requestChild(parent, OperationType.REPLICA_ATTACH, n, ap, "Rattacher " + n.name + " à " + target.name);
+                    attached++;
+                }
+                if (attached == 0) finish(parent, OperationStatus.SUCCEEDED, null, t);
+                else ops.event(parent, "INFO", "Étape 3 : rattachement de " + attached + " réplique(s) à " + target.name);
+            }
+            case REPLICA_ATTACH -> {
+                if (Operation.count("parentId = ?1 and type = ?2 and status in ?3", parent.id, OperationType.REPLICA_ATTACH,
+                        List.of(OperationStatus.QUEUED, OperationStatus.RUNNING)) > 0) return;
+                long failed = Operation.count("parentId = ?1 and type = ?2 and status <> ?3", parent.id, OperationType.REPLICA_ATTACH, OperationStatus.SUCCEEDED);
+                if (failed == 0) finish(parent, OperationStatus.SUCCEEDED, null, t);
+                else finish(parent, OperationStatus.INTERVENTION_REQUIRED, target.name + " est primaire, mais " + failed + " rattachement(s) ont échoué", t);
+            }
+            default -> { }
+        }
+    }
+
+    /**
+     * Bascule faite à la main sans console (docs/procedure-urgence.md) : l'inventaire
+     * est aligné sur le serveur effectivement promu, l'ancien primaire est marqué isolé.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    public void declareManualFailover(Topology t, DatabaseNode promoted, String topologyConfirmation, String actor) {
+        if (topologyConfirmation == null || !t.name.equals(topologyConfirmation.trim())) {
+            throw new BadRequestException("Saisissez exactement le nom de la topologie pour confirmer");
+        }
+        if (!t.id.equals(promoted.topologyId) || promoted.expectedRole == NodeRole.PRIMARY) {
+            throw new BadRequestException(promoted.name + " n'est pas une réplique de cette topologie");
+        }
+        AgentReport r = monitoring.parse(promoted.lastReport);
+        boolean writable = r != null && r.reachable() && r.server() != null && !r.server().readOnly() && r.channelsOrEmpty().isEmpty();
+        if (!writable || promoted.lastReportAt == null || Duration.between(promoted.lastReportAt, Instant.now()).compareTo(REPORT_FRESHNESS) > 0) {
+            throw new BadRequestException(promoted.name + " ne se présente pas comme primaire (rapport récent en écriture et sans réplication requis)");
+        }
+        if (Operation.count("topologyId = ?1 and status in ?2", t.id, List.of(OperationStatus.AWAITING_APPROVAL, OperationStatus.QUEUED, OperationStatus.RUNNING)) > 0) {
+            throw new BadRequestException("Des opérations sont en cours dans la topologie : annulez-les d'abord");
+        }
+        DatabaseNode old = DatabaseNode.find("topologyId = ?1 and expectedRole = ?2", t.id, NodeRole.PRIMARY).firstResult();
+        if (old != null) {
+            old.expectedRole = NodeRole.REPLICA;
+            old.fenceRequired = true;
+            old.fenceReason = "Remplacé par " + promoted.name + " lors d'une bascule manuelle déclarée par " + actor;
+        }
+        promoted.expectedRole = NodeRole.PRIMARY;
+        if (t.backupNodeId != null && t.backupNodeId.equals(promoted.id)) t.backupNodeId = null;
+        audit.record(actor, "FAILOVER_MANUAL_DECLARED", "topology:" + t.id, "SUCCESS", t.tenantId, t.siteId,
+                t.name + " : " + promoted.name + " déclaré primaire" + (old == null ? "" : ", " + old.name + " isolé"));
+    }
+
+    /** Agent de l'ancien primaire muet : l'isolement automatique est abandonné après une minute. */
+    @Transactional
+    public void expireFence(Instant now) {
+        for (Operation f : Operation.<Operation>list("type = ?1 and status = ?2 and requestedAt < ?3 and parentId is not null",
+                OperationType.FENCE, OperationStatus.QUEUED, now.minusSeconds(60))) {
+            f.status = OperationStatus.FAILED;
+            f.finishedAt = now;
+            f.error = "l'agent n'a pas pris en charge l'isolement en 60 s";
+            ops.event(f, "ERROR", f.error);
+            onChildFinished(f);
+        }
+    }
+
+    /** Un serveur marqué isolé qui redevient accessible en écriture est remis en lecture seule. */
+    @Transactional(Transactional.TxType.MANDATORY)
+    public void enforceFence(DatabaseNode node, AgentReport r) {
+        if (!node.fenceRequired || r == null || !r.reachable() || r.server() == null || r.server().readOnly()) return;
+        if (!r.capabilitiesOrEmpty().contains("replicationControl")) return;
+        // Aucune opération en cours sur ce serveur (une reconstruction passe brièvement en écriture).
+        if (Operation.count("nodeId = ?1 and status in ?2", node.id,
+                List.of(OperationStatus.AWAITING_APPROVAL, OperationStatus.QUEUED, OperationStatus.RUNNING)) > 0) return;
+        ops.request(OperationType.FENCE, node, Map.of("stopService", false),
+                node.name + " isolé est revenu en écriture : remise en lecture seule automatique", OperationService.SYSTEM);
     }
 
     private static Check ok(String id, String m) { return new Check(id, "OK", m); }

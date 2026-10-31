@@ -15,6 +15,7 @@ public class Jobs {
     @Inject MonitoringService monitoring;
     @Inject BackupService backups;
     @Inject OperationService operations;
+    @Inject ReplicationService replication;
 
     @ConfigProperty(name = "prm.operations.stale-after", defaultValue = "PT2H")
     java.time.Duration staleAfter;
@@ -32,6 +33,7 @@ public class Jobs {
             concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void scheduleBackups() {
         operations.markStale(staleAfter);
+        replication.expireFence(Instant.now());
         backups.schedule(Instant.now());
     }
 

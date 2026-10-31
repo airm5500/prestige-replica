@@ -48,7 +48,7 @@ export const opTypeLabel: Record<OperationType, string> = {
   REPLICATION_PAUSE: 'Suspension de la réplication', REPLICATION_RESUME: 'Reprise de la réplication',
   SWITCHOVER: 'Bascule planifiée du primaire', SWITCHOVER_DEMOTE: "Rétrogradation de l'ancien primaire",
   SWITCHOVER_PROMOTE: 'Promotion de la nouvelle source', SWITCHOVER_UNDO: 'Retour arrière (ancien primaire rouvert)',
-  REPLICA_ATTACH: 'Rattachement à la source',
+  REPLICA_ATTACH: 'Rattachement à la source', FAILOVER: "Bascule d'urgence (primaire perdu)", FENCE: "Isolement de l'ancien primaire",
 }
 export const opStatusLabel: Record<OperationStatus, string> = {
   AWAITING_APPROVAL: 'En attente d\'approbation', QUEUED: 'En file', RUNNING: 'En cours', SUCCEEDED: 'Réussie',

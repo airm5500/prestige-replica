@@ -224,6 +224,13 @@ public class OperationService {
                 b.verifiedAt = op.finishedAt;
                 b.restoreSeconds = rt.totalSeconds;
             }
+            case PROVISION_REPLICA -> {
+                if (op.status != OperationStatus.SUCCEEDED) return;
+                // Reconstruit depuis une sauvegarde de la source : plus de risque de divergence.
+                DatabaseNode n = DatabaseNode.findById(op.nodeId);
+                n.fenceRequired = false;
+                n.fenceReason = null;
+            }
             case BACKUP_PRUNE -> {
                 if (result != null) {
                     for (JsonNode d : result.path("deleted")) {

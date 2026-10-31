@@ -63,6 +63,13 @@ const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '
       Après la bascule, Prestige doit être pointé vers <code>{{ params.newAddress }}</code>.
     </div>
 
+    <div v-if="op.type === 'FAILOVER'" class="fence-box">
+      <strong>Bascule d'urgence de {{ view?.topologyName }} : le primaire est perdu.</strong>
+      L'ancien primaire sera isolé (lecture seule ou arrêt du service), puis <code>{{ params.newAddress }}</code> deviendra la source
+      après avoir appliqué tout ce qu'elle a reçu. <strong>Perte estimée :</strong> {{ params.lossEstimate }}
+      <template v-if="params.fencingConfirmed"> L'isolement manuel de l'ancien primaire a été confirmé par le demandeur.</template>
+    </div>
+
     <form v-if="canApprove" class="toolbar" @submit.prevent="approve">
       <label>Pour approuver, ressaisissez le code de la pharmacie ({{ view?.siteCode }})
         <input v-model="confirmation" autocomplete="off" required />
@@ -76,13 +83,14 @@ const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="op.error" class="error">{{ op.error }}</p>
 
-    <template v-if="op.type === 'SWITCHOVER' && result">
+    <template v-if="(op.type === 'SWITCHOVER' || op.type === 'FAILOVER') && result">
       <h3>Bilan</h3>
       <dl class="kv">
         <dt>Primaire actuel</dt><dd class="mono">{{ result.newPrimary }}</dd>
         <dt>Écritures interrompues</dt><dd>{{ seconds(result.writeUnavailableMs) }}</dd>
         <dt>Durée totale</dt><dd>{{ duration(result.totalSeconds) }}</dd>
-        <dt>Dernière transaction de l'ancien primaire</dt><dd class="mono">{{ result.finalGtid ?? '—' }}</dd>
+        <template v-if="op.type === 'FAILOVER'"><dt>Perte estimée</dt><dd>{{ result.lossEstimate ?? '—' }}</dd></template>
+        <template v-else><dt>Dernière transaction de l'ancien primaire</dt><dd class="mono">{{ result.finalGtid ?? '—' }}</dd></template>
         <dt>Position de la nouvelle source</dt><dd class="mono">{{ result.newPrimaryGtid ?? '—' }}</dd>
       </dl>
     </template>
@@ -125,7 +133,7 @@ const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '
         <dt>Clé</dt><dd class="mono">{{ result.manifest.keyId }}</dd>
       </dl>
     </template>
-    <details v-else-if="result && op.type !== 'SWITCHOVER'">
+    <details v-else-if="result && op.type !== 'SWITCHOVER' && op.type !== 'FAILOVER'">
       <summary>Résultat détaillé</summary>
       <pre class="details">{{ JSON.stringify(result, null, 2) }}</pre>
     </details>

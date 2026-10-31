@@ -11,7 +11,8 @@ import (
 func defaultConfigPath() string { return "/etc/prestige-replica-manager/agent.json" }
 
 // runService exécute l'agent au premier plan ; systemd gère le cycle de vie.
-func runService(fn func(ctx context.Context) error) {
+func runService(name string, fn func(ctx context.Context) error) {
+	_ = name
 	ctx, cancel := signalContext()
 	defer cancel()
 	if err := fn(ctx); err != nil {

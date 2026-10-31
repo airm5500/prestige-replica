@@ -188,6 +188,10 @@ func localOperation(cmd string, cfg *config.Config, db *sql.DB, role, rel string
 		j = ops.Job{Type: ops.TypeBackupFull, Params: mustJSON(map[string]any{"backupId": "local-" + id, "relativeDir": "local/" + id})}
 	case "restore-test":
 		j = ops.Job{Type: ops.TypeRestoreTest, Params: mustJSON(map[string]any{"relativeDir": rel})}
+	case "fence":
+		j = ops.Job{Type: ops.TypeFence, Params: mustJSON(map[string]any{"stopService": false})}
+	case "promote":
+		j = ops.Job{Type: ops.TypeSwitchoverPromote, Params: mustJSON(map[string]any{"waitRelay": true, "timeoutSeconds": 300})}
 	}
 	res, err := r.Execute(ctx, j, consoleReporter{})
 	if res != nil {

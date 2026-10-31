@@ -103,3 +103,8 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 }
 .form label.check { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; }
 .steps .badge { margin-right: .4rem; } .report-table td.nowrap { width: 11rem; }
+.fence-box, .ko-box { border-left: 4px solid var(--crit, #b91c1c); background: rgba(185, 28, 28, .07); padding: .6rem .8rem; margin: .6rem 0; }
+.modes { display: inline-flex; gap: 0; margin: .4rem 0 .8rem; }
+.modes button { border-radius: 0; }
+.modes button.on { background: var(--accent, #1d4ed8); color: #fff; }
+.modes button.on.urgent { background: var(--crit, #b91c1c); }

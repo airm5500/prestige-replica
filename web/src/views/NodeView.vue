@@ -100,6 +100,32 @@ const config = computed(() => {
       <RouterLink to="/backups">Sauvegardes et répliques →</RouterLink>
     </div>
 
+    <div v-if="summary.fenceRequired" class="fence-box" role="alert">
+      <strong>Serveur isolé après une bascule d'urgence.</strong>
+      Il peut contenir des ventes jamais reçues par le nouveau primaire : il reste en lecture seule et ne doit pas être rattaché tel quel.
+      Reconstruisez-le depuis une sauvegarde du nouveau primaire.
+      <span v-if="summary.fenceReason" class="muted small"> {{ summary.fenceReason }}.</span>
+    </div>
+
+    <div v-if="summary.router" class="card">
+      <h2>Routeur de connexion <span class="mono small muted">{{ summary.router.listen }}</span></h2>
+      <p v-if="summary.router.current" class="small">Prestige est dirigé vers <strong class="mono">{{ summary.router.current }}</strong>
+        <span class="muted"> depuis le {{ date(summary.router.lastChangeAt) }}</span>.</p>
+      <p v-else class="ko-box small" role="alert">Connexions refusées : {{ summary.router.reason }}</p>
+      <table>
+        <thead><tr><th>Serveur</th><th>État vu par le routeur</th></tr></thead>
+        <tbody>
+          <tr v-for="t in summary.router.targets" :key="t.address">
+            <td class="mono small">{{ t.address }}</td>
+            <td>{{ !t.reachable ? 'injoignable' + (t.error ? ' (' + t.error + ')' : '') : t.replicating ? 'réplique' : t.readOnly ? 'lecture seule' : 'accepte les écritures' }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted small">{{ summary.router.activeConnections }} connexion(s) ouverte(s), {{ summary.router.totalConnections }} au total,
+        {{ summary.router.refusedConnections }} refusée(s)<span v-if="summary.router.splitBrainEvents">,
+        <strong>{{ summary.router.splitBrainEvents }} situation(s) à deux primaires évitée(s)</strong></span>.</p>
+    </div>
+
     <div v-if="isReplica" class="card">
       <h2>Réplication</h2>
       <div v-if="summary.replicationPausedAt" class="pause-box" role="status">
@@ -123,7 +149,7 @@ const config = computed(() => {
       <template v-if="canOperate && canControl">
         <div class="toolbar">
           <button v-if="summary.replicationPausedAt" class="primary" @click="start(api.resume)">Reprendre la réplication</button>
-          <button v-if="!summary.channels.length" @click="start(api.attach)" title="Brancher ce serveur sur le primaire actuel de la topologie">Rattacher au primaire</button>
+          <button v-if="!summary.channels.length && !summary.fenceRequired" @click="start(api.attach)" title="Brancher ce serveur sur le primaire actuel de la topologie">Rattacher au primaire</button>
         </div>
         <form v-if="!summary.replicationPausedAt && summary.channels.length" class="toolbar" @submit.prevent="pause">
           <label>Suspendre

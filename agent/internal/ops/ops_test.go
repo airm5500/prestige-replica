@@ -102,7 +102,7 @@ func (nopRep) Warn(string) {}
 
 func TestControlRequiresLocalOptIn(t *testing.T) {
 	r := &Runner{Cfg: &config.Config{}}
-	for _, typ := range []string{TypeReplicationPause, TypeReplicationResume, TypeSwitchoverDemote, TypeSwitchoverPromote, TypeSwitchoverUndo, TypeReplicaAttach} {
+	for _, typ := range []string{TypeReplicationPause, TypeReplicationResume, TypeSwitchoverDemote, TypeSwitchoverPromote, TypeSwitchoverUndo, TypeReplicaAttach, TypeFence} {
 		_, err := r.Execute(context.Background(), Job{Type: typ, Params: []byte(`{}`)}, nopRep{})
 		if err == nil || !strings.Contains(err.Error(), "replicationControl.enabled") {
 			t.Errorf("%s accepté sans replicationControl.enabled : %v", typ, err)

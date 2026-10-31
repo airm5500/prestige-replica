@@ -17,7 +17,12 @@ public enum OperationType {
     SWITCHOVER_DEMOTE(false, "Rétrogradation de l'ancien primaire"),
     SWITCHOVER_PROMOTE(false, "Promotion de la nouvelle source"),
     SWITCHOVER_UNDO(false, "Retour arrière : ancien primaire rouvert en écriture"),
-    REPLICA_ATTACH(false, "Rattachement à la nouvelle source");
+    REPLICA_ATTACH(false, "Rattachement à la nouvelle source"),
+
+    // Lot 4
+    /** Bascule d'urgence : le primaire est perdu ; perte possible des dernières transactions. */
+    FAILOVER(true, "Bascule d'urgence (primaire perdu)", true),
+    FENCE(false, "Isolement de l'ancien primaire");
 
     public final boolean requiresApproval;
     public final String label;

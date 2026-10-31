@@ -26,6 +26,7 @@ export interface NodeSummary {
   channels: ChannelView[]; minDiskFreePct: number | null; agentVersion: string | null; agentTokenPrefix: string
   openIncidents: number; worstSeverity: Severity | null; capabilities: string[]
   replicationPausedAt: string | null; replicationPausedBy: string | null; replicationPauseReason: string | null
+  fenceRequired: boolean; fenceReason: string | null; router: RouterStatus | null
 }
 export interface TopologySummary { id: string; name: string; mode: string; maintenance: boolean; status: Health; primary: string | null; rpoSecondsEstimate: number | null; nodes: NodeSummary[] }
 export interface SiteSummary {
@@ -43,7 +44,7 @@ export interface NotificationChannel { id: string; tenantId: string; siteId: str
 export interface UserOut { id: string; username: string; role: string; tenantId: string | null; siteId: string | null; displayName: string | null; enabled: boolean }
 
 export type OperationType = 'PREFLIGHT' | 'BACKUP_FULL' | 'RESTORE_TEST' | 'BACKUP_PRUNE' | 'PROVISION_REPLICA'
-  | 'REPLICATION_PAUSE' | 'REPLICATION_RESUME' | 'SWITCHOVER' | 'SWITCHOVER_DEMOTE' | 'SWITCHOVER_PROMOTE' | 'SWITCHOVER_UNDO' | 'REPLICA_ATTACH'
+  | 'REPLICATION_PAUSE' | 'REPLICATION_RESUME' | 'SWITCHOVER' | 'SWITCHOVER_DEMOTE' | 'SWITCHOVER_PROMOTE' | 'SWITCHOVER_UNDO' | 'REPLICA_ATTACH' | 'FAILOVER' | 'FENCE'
 export type OperationStatus = 'AWAITING_APPROVAL' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'INTERVENTION_REQUIRED' | 'CANCELLED'
 export interface Operation {
   id: string; tenantId: string; siteId: string; topologyId: string | null; nodeId: string; type: OperationType; status: OperationStatus
@@ -57,6 +58,15 @@ export interface OperationView {
   topologyName: string | null; steps: OperationView[]
 }
 export interface Check { id: string; status: 'OK' | 'WARN' | 'FAIL'; message: string }
+export interface RouterTarget { address: string; reachable: boolean; readOnly: boolean; replicating: boolean; serverId: number; error?: string }
+export interface RouterStatus {
+  listen: string; current: string; reason: string; targets: RouterTarget[]; activeConnections: number
+  totalConnections: number; refusedConnections: number; lastChangeAt: string; splitBrainEvents: number
+}
+export interface FailoverPlan {
+  ready: boolean; checks: Check[]; oldPrimary: string | null; targetId: string | null; target: string | null
+  oldAgentAlive: boolean; manualFencingRequired: boolean; lossEstimate: string | null; repointed: string[]
+}
 export interface SwitchoverPlan { ready: boolean; checks: Check[]; oldPrimary: string | null; target: string | null; newSource: string | null; repointed: string[] }
 export interface RepairPlan {
   diagnosis: string; detail: string; eligibleBackups: string[]
@@ -167,6 +177,12 @@ export const api = {
   resume: (nodeId: string) => request<Operation>('POST', `api/v1/nodes/${nodeId}/replication/resume`),
   attach: (nodeId: string) => request<Operation>('POST', `api/v1/nodes/${nodeId}/replication/attach`),
   repairPlan: (nodeId: string) => request<RepairPlan>('GET', `api/v1/nodes/${nodeId}/repair-plan`),
+  failoverPlan: (topologyId: string, targetNodeId: string | null) =>
+    request<FailoverPlan>('POST', `api/v1/topologies/${topologyId}/failover/plan`, { targetNodeId }),
+  failover: (topologyId: string, b: { targetNodeId: string | null; fencingConfirmed: boolean; topologyConfirmation: string }) =>
+    request<Operation>('POST', `api/v1/topologies/${topologyId}/failover`, b),
+  declareManualFailover: (topologyId: string, b: { newPrimaryNodeId: string; topologyConfirmation: string }) =>
+    request<void>('POST', `api/v1/topologies/${topologyId}/failover/declare-manual`, b),
   switchoverPlan: (topologyId: string, targetNodeId: string) => request<SwitchoverPlan>('POST', `api/v1/topologies/${topologyId}/switchover/plan`, { targetNodeId }),
   switchover: (topologyId: string, b: { targetNodeId: string; reattachOldPrimary: boolean; topologyConfirmation: string }) =>
     request<Operation>('POST', `api/v1/topologies/${topologyId}/switchover`, b),

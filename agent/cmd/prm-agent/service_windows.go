@@ -49,10 +49,10 @@ func (s *winService) Execute(_ []string, req <-chan svc.ChangeRequest, st chan<-
 
 // runService s'intègre au gestionnaire de services Windows, ou s'exécute au
 // premier plan lorsqu'il est lancé depuis une console.
-func runService(fn func(ctx context.Context) error) {
+func runService(name string, fn func(ctx context.Context) error) {
 	isSvc, err := svc.IsWindowsService()
 	if err == nil && isSvc {
-		if err := svc.Run("PrestigeReplicaAgent", &winService{fn: fn}); err != nil {
+		if err := svc.Run(name, &winService{fn: fn}); err != nil {
 			os.Exit(1)
 		}
 		return

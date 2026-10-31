@@ -22,7 +22,9 @@ public record AgentReport(
         Binlogs binlogs,
         List<Channel> channels,
         List<Disk> disks,
-        List<String> errors) {
+        List<String> errors,
+        /** État du routeur de connexion embarqué (Lot 4), absent s'il n'est pas activé. */
+        com.fasterxml.jackson.databind.JsonNode router) {
 
     public List<Channel> channelsOrEmpty() { return channels == null ? List.of() : channels; }
     public List<Disk> disksOrEmpty() { return disks == null ? List.of() : disks; }

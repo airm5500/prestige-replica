@@ -26,7 +26,7 @@ class AlertRulesTest {
     }
 
     static AgentReport report(AgentReport.Server s, List<AgentReport.Channel> ch, List<AgentReport.Disk> disks) {
-        return new AgentReport(1, "0.1.0", NOW, "h", "linux", "amd64", List.of(), true, s, null, ch, disks, List.of());
+        return new AgentReport(1, "0.1.0", NOW, "h", "linux", "amd64", List.of(), true, s, null, ch, disks, List.of(), null);
     }
 
     static List<String> types(List<Finding> f) { return f.stream().map(Finding::type).toList(); }
@@ -93,7 +93,7 @@ class AlertRulesTest {
 
     @Test
     void unreachableMariaDb() {
-        var r = new AgentReport(1, "0.1.0", NOW, "h", "linux", "amd64", List.of(), false, null, null, List.of(), List.of(), List.of("connexion refusée"));
+        var r = new AgentReport(1, "0.1.0", NOW, "h", "linux", "amd64", List.of(), false, null, null, List.of(), List.of(), List.of("connexion refusée"), null);
         assertEquals(List.of("MARIADB_UNREACHABLE"), types(AlertRules.evaluate(NodeRole.PRIMARY, r, NOW, NOW, T)));
     }
 

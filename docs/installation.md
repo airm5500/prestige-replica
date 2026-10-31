@@ -1,4 +1,4 @@
-# Installation (Lots 1 à 3)
+# Installation (Lots 1 à 4)
 
 ## 1. Compte de supervision MariaDB
 
@@ -148,7 +148,49 @@ Points à vérifier avant la première bascule :
 
 1. **Le compte de Prestige ne doit pas avoir le privilège `SUPER`** (ni `READ_ONLY ADMIN` en 10.11). Sinon `read_only` ne bloque pas ses écritures : l'agent le détecte (les positions GTID continuent d'avancer), annule la bascule et rouvre l'ancien primaire. Vérification : `SHOW GRANTS FOR 'prestige'@'%';`.
 2. Chaque nœud doit avoir son **adresse hôte:port** renseignée dans la console : c'est l'adresse que prendront les autres répliques, et que Prestige devra utiliser après la bascule.
-3. Après une bascule réussie, **faire pointer Prestige vers le nouveau primaire** (l'adresse est rappelée dans le rapport). L'automatisation de cette étape (DNS, IP virtuelle ou proxy) relève du Lot 4.
+3. Après une bascule réussie, si Prestige ne passe pas par le **routeur de connexion** (§7), le faire pointer vers le nouveau primaire (l'adresse est rappelée dans le rapport).
 4. `protectedUsers` : comptes techniques dont les connexions ne doivent pas être coupées lors de la rétrogradation (outil de supervision tiers, par exemple). Les comptes de l'agent le sont toujours.
 
 L'agent consulte la console toutes les 5 s (`jobPollSeconds`), et chaque seconde pendant une bascule.
+
+## 7. Routeur de connexion (Lot 4)
+
+Le routeur donne à Prestige une **adresse fixe** : après une bascule, plus aucun poste n'est à reconfigurer. C'est un relais TCP intégré à `prm-agent` qui interroge chaque serveur toutes les secondes et dirige les connexions vers **le seul serveur accessible en écriture et qui ne réplique pas**. Dans tous les autres cas (bascule en cours, primaire perdu, deux serveurs en écriture), il **refuse** les connexions au lieu de deviner : Prestige affiche une erreur de connexion pendant quelques secondes, mais jamais deux bases ne reçoivent de ventes en même temps. Lorsqu'il change de serveur, il coupe les connexions encore ouvertes vers l'ancien.
+
+Où l'installer :
+
+- **sur chaque poste Prestige** (recommandé, pas de point unique de panne) : service autonome `deploy/windows/install-router.ps1` avec `router.json` (modèle `deploy/windows/router.example.json`), puis dans Prestige, serveur `127.0.0.1`, port `3310` ;
+- ou sur un serveur d'accès unique, en écoutant sur son adresse réseau (`"listen": "192.168.1.20:3310"`) ; ce serveur devient alors indispensable ;
+- ou dans l'agent d'un serveur (section `router` de `agent.json`) : son état (serveur choisi, connexions refusées, situations à deux primaires évitées) s'affiche alors sur la fiche du serveur dans la console.
+
+```json
+"router": {
+  "enabled": true,
+  "listen": "127.0.0.1:3310",
+  "targets": ["192.168.1.10:3306", "192.168.1.11:3306"],
+  "user": "prm_monitor",
+  "passwordFile": "C:\\ProgramData\\PrestigeReplicaManager\\mariadb.password",
+  "probeIntervalMs": 1000,
+  "failuresBeforeDown": 2
+}
+```
+
+Points à vérifier :
+
+1. Le compte `prm_monitor` doit pouvoir se connecter **depuis la machine du routeur** sur chaque serveur cible (`CREATE USER 'prm_monitor'@'192.168.1.%' ...` avec les mêmes droits qu'au §1).
+2. Vu de MariaDB, les connexions de Prestige viennent de la machine du routeur : le compte de Prestige doit être autorisé depuis cette adresse (`127.0.0.1` si le routeur est sur le même serveur que MariaDB).
+3. Le chiffrement TLS éventuel entre Prestige et MariaDB traverse le routeur sans modification.
+4. `failuresBeforeDown` : nombre de sondes manquées avant de considérer un serveur perdu (2 par défaut, soit environ 2 s). Une seule sonde perdue ne coupe rien.
+
+## 8. Bascule d'urgence et isolement (Lot 4)
+
+Rien de plus à activer que `replicationControl` (§6) : la bascule d'urgence réutilise les mêmes autorisations locales. Elle n'est **jamais automatique** : une personne la demande, une autre l'approuve. Procédure complète, avec le cas « console injoignable » : [procedure-urgence.md](procedure-urgence.md).
+
+Pour que l'agent puisse **arrêter MariaDB et désactiver son démarrage automatique** sur un ancien primaire (et, au Lot 2, reconstruire une réplique), son compte de service doit avoir des droits sur le service MariaDB. En PowerShell administrateur, sur chaque serveur :
+
+```powershell
+deploy\windows\grant-service-control.ps1 -MariaDbService MariaDB
+```
+
+Recommandé : `read_only=ON` dans le `my.ini` de **toutes** les répliques. Un ancien primaire qui redémarre seul revient ainsi en lecture seule. S'il revient malgré tout en écriture, le routeur refuse les connexions (deux primaires), la console le remet en lecture seule au rapport suivant de son agent et ouvre un incident critique « isolé de nouveau accessible en écriture ».
+

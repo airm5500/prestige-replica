@@ -28,6 +28,7 @@ import (
 	"github.com/airm5500/prestige-replica-manager/agent/internal/config"
 	"github.com/airm5500/prestige-replica-manager/agent/internal/ops"
 	"github.com/airm5500/prestige-replica-manager/agent/internal/report"
+	"github.com/airm5500/prestige-replica-manager/agent/internal/router"
 )
 
 // Version est injectée à la construction (-ldflags "-X main.Version=...").
@@ -42,12 +43,17 @@ Utilisation :
   prm-agent status -config agent.json -json
   prm-agent check  -config agent.json   valide la configuration et la connexion MariaDB
   prm-agent version
+  prm-agent router -config router.json  routeur seul (poste Prestige ou serveur d'accès), sans supervision
 
 CLI de secours (fonctionne sans console, avec la configuration locale) :
   prm-agent keygen  -out backup.key        génère une clé de chiffrement des sauvegardes
   prm-agent preflight -config agent.json [-role PRIMARY|REPLICA]
   prm-agent backup  -config agent.json      sauvegarde complète dans backup.root/local/<horodatage>
   prm-agent restore-test -config agent.json -dir <chemin relatif sous backup.root>
+
+Urgence, console injoignable (voir docs/procedure-urgence.md) :
+  prm-agent fence   -config agent.json      isole CE serveur (lecture seule, connexions coupées)
+  prm-agent promote -config agent.json      promeut CETTE réplique après application de tout ce qu'elle a reçu
 `, Version)
 }
 
@@ -77,7 +83,10 @@ func main() {
 			os.Exit(1)
 		}
 		return
-	case "run", "status", "check", "preflight", "backup", "restore-test":
+	case "router":
+		runRouterStandalone(*cfgPath, logger)
+		return
+	case "run", "status", "check", "preflight", "backup", "restore-test", "fence", "promote":
 	default:
 		usage()
 		os.Exit(2)
@@ -132,11 +141,25 @@ func main() {
 		if !ok {
 			os.Exit(1)
 		}
-	case "preflight", "backup", "restore-test":
+	case "preflight", "backup", "restore-test", "fence", "promote":
 		os.Exit(localOperation(cmd, cfg, db, *role, *relDir))
 	case "run":
 		runner := &ops.Runner{Cfg: cfg, Monitor: db, Version: Version}
-		runService(func(ctx context.Context) error { return run(ctx, cfg, col, runner, logger) })
+		runService("PrestigeReplicaAgent", func(ctx context.Context) error {
+			if cfg.Router.Enabled {
+				rt, err := newRouter(cfg.Router, logger)
+				if err != nil {
+					return err
+				}
+				col.RouterStatus = func() any { s := rt.Snapshot(); return &s }
+				go func() {
+					if err := rt.Run(ctx); err != nil {
+						logger.Error("routeur arrêté", "erreur", err.Error())
+					}
+				}()
+			}
+			return run(ctx, cfg, col, runner, logger)
+		})
 	}
 }
 
@@ -269,6 +292,7 @@ func printStatus(r report.Report) {
 			name = "(défaut)"
 		}
 		fmt.Printf("Canal %s ← %s:%d  IO=%s SQL=%s retard=%s GTID=%s\n", name, c.MasterHost, c.MasterPort, c.IORunning, c.SQLRunning, lag, c.UsingGtid)
+		fmt.Printf("  Gtid_IO_Pos=%s (dernière transaction reçue du primaire)\n", c.GtidIOPos)
 		if c.LastIOErrno != 0 {
 			fmt.Printf("  erreur IO %d : %s\n", c.LastIOErrno, c.LastIOError)
 		}
@@ -286,4 +310,47 @@ func printStatus(r report.Report) {
 	for _, e := range r.Errors {
 		fmt.Printf("Avertissement : %s\n", e)
 	}
+}
+
+func newRouter(rc router.Config, log *slog.Logger) (*router.Router, error) {
+	pw, err := config.ReadSecret(rc.PasswordFile)
+	if err != nil {
+		return nil, err
+	}
+	return router.New(rc, pw, log), nil
+}
+
+// runRouterStandalone lance uniquement le routeur de connexion. Le fichier
+// contient une section « router » (même format que dans agent.json).
+func runRouterStandalone(path string, log *slog.Logger) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "lecture configuration:", err)
+		os.Exit(1)
+	}
+	var f struct {
+		Router router.Config `json:"router"`
+	}
+	if err := json.Unmarshal(raw, &f); err != nil {
+		fmt.Fprintln(os.Stderr, "configuration invalide:", err)
+		os.Exit(1)
+	}
+	f.Router.Enabled = true
+	if err := f.Router.Validate(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	rt, err := newRouter(f.Router, log)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	go func() {
+		// État lisible dans le journal toutes les minutes.
+		for range time.Tick(time.Minute) {
+			s := rt.Snapshot()
+			log.Info("état du routeur", "primaire", s.Current, "raison", s.Reason, "connexions", s.ActiveConns, "refusées", s.Refused)
+		}
+	}()
+	runService("PrestigeReplicaRouter", rt.Run)
 }

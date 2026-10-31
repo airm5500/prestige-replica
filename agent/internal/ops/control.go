@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,6 +36,16 @@ type DemoteParams struct {
 type PromoteParams struct {
 	GTID           string `json:"gtid"`
 	TimeoutSeconds int    `json:"timeoutSeconds"`
+	// WaitRelay (bascule d'urgence) : la source est perdue ; on attend que
+	// tout ce qui a été reçu (Gtid_IO_Pos) soit appliqué avant de promouvoir.
+	WaitRelay bool `json:"waitRelay"`
+}
+
+// FenceParams : isolement d'un ancien primaire (bascule d'urgence).
+type FenceParams struct {
+	// StopService : si MariaDB ne répond pas, arrêter son service pour
+	// qu'un processus bloqué ne reprenne pas les écritures.
+	StopService bool `json:"stopService"`
 }
 
 // AttachParams : (re)branchement de ce serveur sur une nouvelle source.
@@ -320,6 +331,16 @@ func (r *Runner) Promote(ctx context.Context, p PromoteParams, rep Reporter) (ma
 		return notPromoted, fmt.Errorf("le thread SQL est arrêté (%s) : la réplique n'est pas à jour, promotion refusée", st["Last_SQL_Error"])
 	}
 	start := time.Now()
+	if p.WaitRelay {
+		if p.GTID != "" {
+			return notPromoted, errors.New("gtid et waitRelay sont exclusifs")
+		}
+		p.GTID = st["Gtid_IO_Pos"]
+		rep.Step("source perdue : application de tout ce qui a été reçu (" + p.GTID + ")")
+	}
+	if p.GTID != "" && !gtidRe.MatchString(p.GTID) {
+		return notPromoted, errors.New("position reçue illisible : " + p.GTID)
+	}
 	if p.GTID != "" {
 		rep.Step("attente de l'application de la position " + p.GTID)
 		var res sql.NullInt64
@@ -402,6 +423,49 @@ func (r *Runner) Attach(ctx context.Context, p AttachParams, rep Reporter) (map[
 	return map[string]any{"replication": st, "delaySeconds": delay}, nil
 }
 
+// Fence isole un ancien primaire : lecture seule et coupure des connexions
+// s'il répond ; arrêt du service sinon (s'il est demandé). Jamais l'inverse :
+// aucune opération ne rouvre en écriture un serveur isolé.
+func (r *Runner) Fence(ctx context.Context, p FenceParams, rep Reporter) (map[string]any, error) {
+	db, err := r.controlDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	err = db.PingContext(pctx)
+	cancel()
+	if err == nil {
+		rep.Step("MariaDB répond : passage en lecture seule et coupure des connexions")
+		if _, err := db.ExecContext(ctx, "SET GLOBAL read_only = ON"); err != nil {
+			return nil, fmt.Errorf("SET GLOBAL read_only : %w", err)
+		}
+		killed, _ := r.killClients(ctx, db, rep)
+		pos, _ := scalar(ctx, db, "SELECT @@gtid_binlog_pos")
+		rep.Step("serveur isolé ; dernière position locale " + pos)
+		return map[string]any{"fenced": true, "readOnly": true, "killedConnections": killed, "gtidBinlogPos": pos}, nil
+	}
+	rep.Warn("MariaDB ne répond pas : " + err.Error())
+	if !p.StopService {
+		return map[string]any{"fenced": true, "mariadbDown": true}, nil
+	}
+	rep.Step("arrêt du service MariaDB pour empêcher toute reprise des écritures")
+	serr := r.service(ctx, false)
+	if serr != nil {
+		// Service déjà arrêté : « net stop » / systemctl renvoient une erreur sans gravité.
+		rep.Warn("arrêt du service : " + serr.Error())
+	}
+	res := map[string]any{"fenced": true, "mariadbDown": true, "serviceStopped": serr == nil}
+	// Sans cela, un redémarrage de la machine relancerait MariaDB en écriture.
+	if derr := r.disableAutoStart(ctx); derr != nil {
+		rep.Warn("désactivation du démarrage automatique : " + derr.Error())
+	} else {
+		rep.Step("démarrage automatique du service désactivé (à réactiver après reconstruction)")
+		res["autoStartDisabled"] = true
+	}
+	return res, nil
+}
+
 // UndoDemote rouvre en écriture un ancien primaire rétrogradé, si la promotion
 // de la cible n'a pas eu lieu. Refusé si ce serveur réplique déjà depuis une
 // autre source.
@@ -426,3 +490,25 @@ func (r *Runner) UndoDemote(ctx context.Context, rep Reporter) (map[string]any, 
 }
 
 func readSecretFile(path string) (string, error) { return config.ReadSecret(path) }
+
+// disableAutoStart passe le service MariaDB en démarrage manuel.
+func (r *Runner) disableAutoStart(ctx context.Context) error {
+	if len(r.Cfg.Provisioning.StopCommand) > 0 {
+		return errors.New("commande d'arrêt personnalisée : désactivez le démarrage automatique à la main")
+	}
+	name := r.Cfg.Provisioning.ServiceName
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if runtime.GOOS == "windows" {
+		if name == "" {
+			name = "MariaDB"
+		}
+		_, err := run(cctx, nil, nil, "sc", "config", name, "start=", "demand")
+		return err
+	}
+	if name == "" {
+		name = "mariadb"
+	}
+	_, err := run(cctx, nil, nil, "systemctl", "disable", name)
+	return err
+}

@@ -28,6 +28,8 @@ type Report struct {
 	Disks     []Disk    `json:"disks"`
 	// Errors contient les erreurs de collecte (jamais de mot de passe).
 	Errors []string `json:"errors"`
+	// Router : état du routeur de connexion intégré à l'agent (Lot 4).
+	Router any `json:"router,omitempty"`
 }
 
 // Server regroupe les variables et compteurs utiles à la supervision.

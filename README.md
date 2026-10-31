@@ -4,7 +4,7 @@ Application autonome pour **superviser, puis à terme déployer, réparer et aud
 
 L'application pilote les mécanismes natifs de MariaDB (binlog, GTID, `mariadb-backup`) ; elle ne réimplémente jamais la réplication. Si la console s'arrête, la réplication MariaDB continue.
 
-> **État : Lots 1 à 3.** Observation du parc (lecture seule) ; sauvegardes `mariadb-backup` chiffrées et vérifiées par restauration ; construction assistée d'une réplique ; pause/reprise, réparation guidée et bascule planifiée sans perte avec double approbation et rapport d'opération. Détails : [lot 1](docs/perimetre-lot1.md), [lot 2](docs/perimetre-lot2.md), [lot 3](docs/perimetre-lot3.md).
+> **État : Lots 1 à 4.** Observation du parc (lecture seule) ; sauvegardes `mariadb-backup` chiffrées et vérifiées par restauration ; construction assistée d'une réplique ; pause/reprise, réparation guidée et bascule planifiée sans perte avec double approbation et rapport d'opération ; routeur de connexion (adresse fixe pour Prestige), bascule d'urgence assistée avec isolement de l'ancien primaire, procédure sans console. Détails : [lot 1](docs/perimetre-lot1.md), [lot 2](docs/perimetre-lot2.md), [lot 3](docs/perimetre-lot3.md), [lot 4](docs/perimetre-lot4.md). En cas de panne : [procédure d'urgence](docs/procedure-urgence.md).
 
 ![Accueil du parc](docs/images/parc.png)
 
@@ -14,6 +14,7 @@ L'application pilote les mécanismes natifs de MariaDB (binlog, GTID, `mariadb-b
 |---|---|---|
 | `agent/` | Agent installé près de chaque MariaDB : collecte l'état (threads IO/SQL, retard, GTID, binlogs, configuration, disque) et l'envoie au Control Plane. Liste blanche fermée d'instructions `SHOW`, aucun port ouvert, file bornée hors connexion, CLI de secours `prm-agent status`. | Go, binaire unique Linux/Windows |
 | `agent/internal/ops` | Lot 2 : opérations en liste fermée exécutées par l'agent (prérequis, sauvegarde, restauration de contrôle, construction de réplique, purge), chacune activable localement. | Go |
+| `agent/internal/router` | Lot 4 : routeur de connexion TCP vers le seul serveur accessible en écriture ; refuse en cas de doute (`prm-agent router`). | Go |
 | `control-plane/` | API REST, inventaire multi-pharmacies, règles d'alerte, incidents, notifications courriel/webhook, audit append-only chaîné, sondes `/health/*`. | Java 21, Quarkus, PostgreSQL, Flyway |
 | `web/` | Console : parc, fiche nœud, incidents, audit, paramètres. Pharmacie active rappelée en permanence. | Vue 3, TypeScript strict, Vite, Pinia |
 | `deploy/` | Unités `systemd`, installation du service Windows, `docker compose`. | |

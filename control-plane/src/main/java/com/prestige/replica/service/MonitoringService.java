@@ -33,6 +33,7 @@ public class MonitoringService {
     @Inject ObjectMapper json;
     @Inject IncidentService incidents;
     @Inject jakarta.enterprise.inject.Instance<BackupService> backups;
+    @Inject jakarta.enterprise.inject.Instance<ReplicationService> replication;
 
     @Transactional
     public int ingest(UUID nodeId, List<AgentReport> reports) {
@@ -64,6 +65,7 @@ public class MonitoringService {
                 LOG.warn("Sérialisation du rapport impossible", e);
             }
         }
+        if (latest != null && node.fenceRequired) replication.get().enforceFence(node, latest);
         evaluateNode(node, now);
         if (node.topologyId != null) evaluateTopology(node.topologyId, now);
         return accepted;
@@ -85,8 +87,19 @@ public class MonitoringService {
             AgentReport report = parse(node.lastReport);
             findings = AlertRules.evaluate(node.expectedRole, report, node.lastSeenAt, now, thresholds(topo));
             findings = applyPause(node, report, findings);
+            findings = applyFence(node, report, findings);
         }
         incidents.reconcile(IncidentService.Scope.node(node.tenantId, node.siteId, node.topologyId, node.id), findings, now);
+    }
+
+    /** Ancien primaire isolé : un seul rappel, critique s'il accepte de nouveau les écritures. */
+    static List<Finding> applyFence(DatabaseNode node, AgentReport r, List<Finding> findings) {
+        if (!node.fenceRequired) return findings;
+        boolean writable = r != null && r.reachable() && r.server() != null && !r.server().readOnly();
+        return List.of(new Finding("NODE_FENCED", "", writable ? Severity.CRITICAL : Severity.WARNING,
+                writable ? node.name + " isolé est de nouveau accessible en écriture (remise en lecture seule demandée)"
+                        : node.name + " isolé après une bascule d'urgence : à reconstruire depuis une sauvegarde",
+                node.fenceReason == null ? "" : node.fenceReason));
     }
 
     static final Set<String> PAUSE_MASKED = Set.of("IO_THREAD_STOPPED", "SQL_THREAD_STOPPED", "REPLICATION_LAG");

@@ -106,7 +106,8 @@ public class FleetResource {
                 r != null && r.reachable(), s == null ? null : s.version(), s == null ? null : s.serverId(),
                 s == null ? null : s.readOnly(), s == null ? null : s.gtidCurrentPos(), s == null ? null : s.gtidSlavePos(),
                 ch, disk, n.agentVersion, n.agentTokenPrefix, inc.size(), worst, r == null ? List.of() : r.capabilitiesOrEmpty(),
-                n.replicationPausedAt, n.replicationPausedBy, n.replicationPauseReason);
+                n.replicationPausedAt, n.replicationPausedBy, n.replicationPauseReason,
+                n.fenceRequired, n.fenceReason, r == null ? null : r.router());
     }
 
     /**
