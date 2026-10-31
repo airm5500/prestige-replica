@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, type Backup, type BackupPolicy, type NodeSummary, type SiteSummary, type Topology } from '../api'
 import { useSession } from '../stores/session'
+import PointInTime from '../components/PointInTime.vue'
 import { bytes, date, duration, roleLabel, weekdayLabel } from '../format'
 
 const session = useSession()
@@ -167,6 +168,8 @@ const statusLabel = { RUNNING: 'En cours', COMPLETED: 'Terminée', FAILED: 'Éch
         </form>
       </div>
     </div>
+
+    <PointInTime v-if="topo" :topo="topo" :nodes="nodes" :can-operate="canOperate" :can-policy="canPolicy" @changed="load" />
 
     <div v-if="topo" class="card">
       <h2>Catalogue</h2>

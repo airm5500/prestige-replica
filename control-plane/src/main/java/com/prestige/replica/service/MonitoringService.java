@@ -34,6 +34,7 @@ public class MonitoringService {
     @Inject IncidentService incidents;
     @Inject jakarta.enterprise.inject.Instance<BackupService> backups;
     @Inject jakarta.enterprise.inject.Instance<ReplicationService> replication;
+    @Inject jakarta.enterprise.inject.Instance<BinlogService> binlogs;
 
     @Transactional
     public int ingest(UUID nodeId, List<AgentReport> reports) {
@@ -137,6 +138,7 @@ public class MonitoringService {
             f.addAll(AlertRules.evaluateTopology(ids));
             f.addAll(backups.get().findings(topo, now));
             f.addAll(replication.get().drillFindings(topo, now));
+            f.addAll(binlogs.get().findings(topo, now));
         }
         incidents.reconcile(IncidentService.Scope.topology(topo.tenantId, topo.siteId, topo.id), f, now);
     }

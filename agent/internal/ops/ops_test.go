@@ -137,3 +137,52 @@ type nopRep struct{}
 
 func (nopRep) Step(string) {}
 func (nopRep) Warn(string) {}
+
+func TestBinlogOperationsRequireOptInAndValidate(t *testing.T) {
+	r := &Runner{Cfg: &config.Config{}}
+	if _, err := r.Execute(context.Background(), Job{Type: TypeBinlogArchive, Params: []byte(`{}`)}, nopRep{}); err == nil || !strings.Contains(err.Error(), "binlogArchive.enabled") {
+		t.Errorf("archivage accepté sans opt-in : %v", err)
+	}
+	if _, err := r.Execute(context.Background(), Job{Type: TypePITR, Params: []byte(`{}`)}, nopRep{}); err == nil || !strings.Contains(err.Error(), "restoreTest.enabled") {
+		t.Errorf("restauration à un instant acceptée sans opt-in : %v", err)
+	}
+	r.Cfg.BinlogArchive.Enabled, r.Cfg.RestoreTest.Enabled = true, true
+	bad := []string{
+		`{"sourceHost":"h;rm","sourcePort":3306,"serverId":1,"relativeDir":"a/b"}`,
+		`{"sourceHost":"h","sourcePort":3306,"serverId":1,"relativeDir":"../x"}`,
+		`{"sourceHost":"h","sourcePort":3306,"serverId":1,"relativeDir":"a","archived":["../../etc/passwd"]}`,
+	}
+	for _, b := range bad {
+		if _, err := r.Execute(context.Background(), Job{Type: TypeBinlogArchive, Params: []byte(b)}, nopRep{}); err == nil {
+			t.Errorf("paramètres d'archivage invalides acceptés : %s", b)
+		}
+	}
+	pbad := []string{
+		`{"stopAt":"2026-10-31T10:00:00Z","binlogs":[{"relativePath":"../a/binlog.000001.prmseal"}]}`,
+		`{"stopAt":"2026-10-31T10:00:00Z","extract":["db.t; DROP"],"extractDir":"x"}`,
+		`{"stopAt":"2026-10-31T10:00:00Z","startGtid":"1-2"}`,
+		`{"binlogs":[]}`,
+	}
+	for _, b := range pbad {
+		if _, err := r.Execute(context.Background(), Job{Type: TypePITR, Params: []byte(b)}, nopRep{}); err == nil {
+			t.Errorf("paramètres de restauration invalides acceptés : %s", b)
+		}
+	}
+	if !archivePathRe.MatchString("tenants/a-1/sites/b/binlogs/2/binlog.000012.prmseal") {
+		t.Error("chemin d'archive valide refusé")
+	}
+}
+
+func TestReplayErrorsOnlyIgnoresAccountStatements(t *testing.T) {
+	e := &replayErrors{}
+	_, _ = e.Write([]byte("--------------\nGRANT BINLOG MONITOR ON *.* TO `prm_repl`@`%`\n--------------\n\n"))
+	_, _ = e.Write([]byte("ERROR 1290 (HY000) at line 32: The MariaDB server is running with the --skip-grant-tables option\nERROR 1290 (HY000) at line 40: idem\n"))
+	if e.skipped != 2 || e.other != "" {
+		t.Fatalf("attendu 2 ignorées, aucune autre : %+v", e)
+	}
+	_, _ = e.Write([]byte("ERROR 1062 (23000) at line 51: Duplicate entry"))
+	_, _ = e.Write([]byte(" '5' for key 'PRIMARY'\n"))
+	if e.other == "" || !strings.Contains(e.other, "1062") {
+		t.Fatalf("une erreur de données doit être retenue : %+v", e)
+	}
+}

@@ -1,4 +1,4 @@
-# Installation (Lots 1 à 4)
+# Installation (Lots 1 à 4, archivage des journaux)
 
 ## 1. Compte de supervision MariaDB
 
@@ -93,6 +93,8 @@ GRANT RELOAD, PROCESS, LOCK TABLES, BINLOG MONITOR ON *.* TO 'prm_backup'@'local
 -- Flux de réplication (utilisé par les répliques pour se connecter au primaire)
 CREATE USER 'prm_repl'@'%' IDENTIFIED BY '<mot-de-passe-long>';   -- restreindre l'hôte aux adresses des répliques
 GRANT REPLICATION SLAVE ON *.* TO 'prm_repl'@'%';
+-- Archivage continu des journaux (§9) : liste des binlogs du primaire
+GRANT BINLOG MONITOR ON *.* TO 'prm_repl'@'%';
 
 -- Pilotage local de la réplique (uniquement depuis la machine elle-même)
 CREATE USER 'prm_admin'@'127.0.0.1' IDENTIFIED BY '<mot-de-passe-long>';
@@ -200,3 +202,22 @@ Recommandé : `read_only=ON` dans le `my.ini` de **toutes** les répliques. Un a
 
 Bascule → onglet **Exercice** : bascule planifiée vers une réplique puis retour automatique, programmable la nuit, avec double validation. À placer à distance de l'heure des sauvegardes (une sauvegarde en cours fait échouer les contrôles, sans effet). Le rappel par défaut est de 90 jours sans exercice réussi ; il se règle sur le même écran (0 = jamais).
 
+
+## 9. Archivage des journaux et restauration à un instant précis
+
+Les sauvegardes complètes sont quotidiennes. Pour revenir **à la seconde près** (ventes supprimées par erreur à 14 h 32, mauvaise mise à jour de masse), un agent recopie en continu les journaux binaires du primaire, chiffrés, à côté des sauvegardes. La restauration se fait **dans une instance isolée**, jamais sur la production : on en extrait les tables utiles.
+
+1. Sur le serveur qui sauvegarde (en général le mini-serveur), dans `agent.json` :
+   ```json
+   "binlogArchive": { "enabled": true }
+   ```
+   Il utilise par défaut le compte de réplication (`prm_repl`), qui doit avoir `BINLOG MONITOR` en plus de `REPLICATION SLAVE` (§5.2). Il faut aussi `backup.root` et la clé de chiffrement. L'agent lit les journaux à l'adresse du primaire déclarée dans l'inventaire ; il suit les bascules tout seul.
+2. Console → **Sauvegardes** → **Régler l'archivage** : activer, choisir ce serveur, intervalle (5 minutes par défaut ; c'est la perte maximale si tous les serveurs étaient perdus ensemble).
+3. Côté primaire, garder les binlogs au moins un jour : `binlog_expire_logs_seconds=604800` (7 jours) est recommandé dans `my.ini`. Si le primaire purge un journal avant son archivage, la console ouvre un incident critique « trou dans l'archive » jusqu'à la prochaine sauvegarde complète.
+4. La restauration (**Restaurer à un instant…**) s'exécute sur le serveur de restauration de contrôle (`restoreTest.enabled`), à partir de la dernière sauvegarde **vérifiée** antérieure à l'instant visé. Les tables demandées sont exportées, chiffrées, dans `backup.root\tenants\…\recoveries\…`. Pour les lire :
+   ```powershell
+   prm-agent decrypt -config agent.json -in "<fichier>.sql.prmseal" -out vente.sql
+   ```
+   Importer le fichier dans une base de travail, **jamais directement dans la production**, puis recopier les seules lignes à récupérer.
+
+Les journaux archivés antérieurs à la plus ancienne sauvegarde conservée sont supprimés automatiquement.

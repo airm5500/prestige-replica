@@ -16,6 +16,7 @@ public class Jobs {
     @Inject BackupService backups;
     @Inject OperationService operations;
     @Inject ReplicationService replication;
+    @Inject BinlogService binlogs;
 
     @ConfigProperty(name = "prm.operations.stale-after", defaultValue = "PT2H")
     java.time.Duration staleAfter;
@@ -35,6 +36,7 @@ public class Jobs {
         operations.markStale(staleAfter);
         replication.expireFence(Instant.now());
         backups.schedule(Instant.now());
+        binlogs.schedule(Instant.now());
     }
 
     @Scheduled(every = "${prm.drill.interval:5s}", delayed = "15s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
@@ -46,5 +48,11 @@ public class Jobs {
     @Transactional
     void purgeMetrics() {
         NodeMetric.delete("collectedAt < ?1", Instant.now().minus(Duration.ofDays(retentionDays)));
+        // Archivages réussis : seul le catalogue compte, l'historique des opérations est allégé après 7 jours.
+        Instant old = Instant.now().minus(Duration.ofDays(7));
+        com.prestige.replica.domain.OperationEvent.delete("operationId in (select o.id from Operation o where o.type = ?1 and o.status = ?2 and o.finishedAt < ?3)",
+                com.prestige.replica.domain.OperationType.BINLOG_ARCHIVE, com.prestige.replica.domain.OperationStatus.SUCCEEDED, old);
+        com.prestige.replica.domain.Operation.delete("type = ?1 and status = ?2 and finishedAt < ?3",
+                com.prestige.replica.domain.OperationType.BINLOG_ARCHIVE, com.prestige.replica.domain.OperationStatus.SUCCEEDED, old);
     }
 }

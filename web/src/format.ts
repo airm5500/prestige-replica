@@ -49,6 +49,7 @@ export const opTypeLabel: Record<OperationType, string> = {
   SWITCHOVER: 'Bascule planifiée du primaire', SWITCHOVER_DEMOTE: "Rétrogradation de l'ancien primaire",
   SWITCHOVER_PROMOTE: 'Promotion de la nouvelle source', SWITCHOVER_UNDO: 'Retour arrière (ancien primaire rouvert)',
   REPLICA_ATTACH: 'Rattachement à la source', FAILOVER: "Bascule d'urgence (primaire perdu)", FENCE: "Isolement de l'ancien primaire", DRILL: 'Exercice de bascule (aller-retour)',
+  BINLOG_ARCHIVE: 'Archivage des journaux binaires', PITR_RESTORE: 'Restauration à un instant précis (isolée)',
 }
 export const opStatusLabel: Record<OperationStatus, string> = {
   AWAITING_APPROVAL: 'En attente d\'approbation', QUEUED: 'En file', RUNNING: 'En cours', SUCCEEDED: 'Réussie',

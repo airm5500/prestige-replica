@@ -28,6 +28,7 @@ public class OperationService {
     @Inject ObjectMapper json;
     @Inject AuditService audit;
     @Inject ReplicationService replication;
+    @Inject jakarta.enterprise.inject.Instance<BinlogService> binlogs;
 
     /** Types exécutés par un agent (les opérations parentes sont pilotées par la console). */
     static final List<OperationType> AGENT_TYPES = Arrays.stream(OperationType.values()).filter(t -> !t.consoleOnly).toList();
@@ -65,7 +66,10 @@ public class OperationService {
         op.requestedAt = Instant.now();
         op.persist();
         event(op, "INFO", "Demandée par " + actor + (op.requiresApproval ? " — en attente d'approbation" : ""));
-        audit.record(actor, "OPERATION_REQUEST", "operation:" + op.id, "SUCCESS", op.tenantId, op.siteId, type + " — " + summary);
+        // L'archivage périodique des journaux n'est pas une action humaine : pas de bruit dans le journal d'audit.
+        if (!(type == OperationType.BINLOG_ARCHIVE && SYSTEM.equals(actor))) {
+            audit.record(actor, "OPERATION_REQUEST", "operation:" + op.id, "SUCCESS", op.tenantId, op.siteId, type + " — " + summary);
+        }
         return op;
     }
 
@@ -251,6 +255,9 @@ public class OperationService {
                 n.replicationPausedAt = null;
                 n.replicationPausedBy = null;
                 n.replicationPauseReason = null;
+            }
+            case BINLOG_ARCHIVE -> {
+                binlogs.get().applyArchive(op, params, result); // y compris les fichiers archivés avant un échec
             }
             default -> { }
         }

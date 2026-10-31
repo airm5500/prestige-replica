@@ -24,7 +24,12 @@ public enum OperationType {
     FAILOVER(true, "Bascule d'urgence (primaire perdu)", true),
     FENCE(false, "Isolement de l'ancien primaire"),
     /** Exercice de panne : bascule planifiée aller puis retour, mesurée, éventuellement programmée la nuit. */
-    DRILL(true, "Exercice de bascule (aller-retour)", true);
+    DRILL(true, "Exercice de bascule (aller-retour)", true),
+
+    // Archivage des binlogs et restauration à un instant précis
+    BINLOG_ARCHIVE(false, "Archivage des journaux binaires"),
+    /** Ne touche jamais la production : instance isolée, extraction chiffrée. */
+    PITR_RESTORE(false, "Restauration à un instant précis (isolée)");
 
     public final boolean requiresApproval;
     public final String label;

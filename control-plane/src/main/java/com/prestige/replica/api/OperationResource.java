@@ -28,6 +28,7 @@ public class OperationResource {
     @Inject BackupService backups;
     @Inject AuditService audit;
     @Inject ReplicationService replication;
+    @Inject com.prestige.replica.service.BinlogService binlogs;
 
     public record ApproveIn(@NotBlank String confirmation) {}
     public record RestoreTestIn(UUID nodeId) {}
@@ -44,6 +45,11 @@ public class OperationResource {
     public record DrillIn(@NotNull UUID targetNodeId, java.time.Instant notBefore, @NotBlank String topologyConfirmation) {}
     public record DrillPolicyIn(@jakarta.validation.constraints.Min(0) @jakarta.validation.constraints.Max(730) int drillMaxAgeDays) {}
     public record ManualFailoverIn(@NotNull UUID newPrimaryNodeId, @NotBlank String topologyConfirmation) {}
+    public record BinlogPolicyIn(boolean binlogArchiveEnabled, UUID binlogArchiveNodeId, @Min(1) @Max(60) int binlogArchiveMinutes) {}
+    public record PitrPlanIn(@NotNull java.time.Instant stopAt) {}
+    public record PitrIn(@NotNull java.time.Instant stopAt, List<String> extract, @NotBlank @Size(max = 300) String reason) {}
+    public record BinlogCatalog(List<com.prestige.replica.domain.BinlogArchive> files, java.time.Instant coveredFrom, java.time.Instant coveredUntil,
+                                long totalBytes, java.time.Instant gapAt, String gapDetail, Operation lastRun) {}
     public record SwitchoverIn(@NotNull UUID targetNodeId, boolean reattachOldPrimary, @NotBlank String topologyConfirmation) {}
 
     static final String[] OPERATORS = {Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN};
@@ -101,6 +107,48 @@ public class OperationResource {
         audit.record(me.username(), "BACKUP_POLICY_UPDATE", "topology:" + t.id, "SUCCESS", t.tenantId, t.siteId,
                 String.format("actif=%s, %02dh, conserver %d, test jour %d", t.backupEnabled, t.backupHour, t.backupKeep, t.restoreTestWeekday));
         return t;
+    }
+
+    // ---- Journaux binaires et restauration à un instant précis --------------
+
+    @PUT @Path("/topologies/{id}/binlog-policy") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.SITE_ADMIN})
+    public Topology binlogPolicy(@PathParam("id") UUID id, @Valid BinlogPolicyIn in) {
+        Topology t = topology(id);
+        if (in.binlogArchiveNodeId() != null) {
+            DatabaseNode dn = node(in.binlogArchiveNodeId());
+            if (!t.id.equals(dn.topologyId)) throw new BadRequestException("Le nœud " + dn.name + " n'appartient pas à la topologie");
+        }
+        if (in.binlogArchiveEnabled() && in.binlogArchiveNodeId() == null && t.backupNodeId == null) {
+            throw new BadRequestException("Choisissez le serveur qui archive les journaux (par défaut, celui des sauvegardes)");
+        }
+        t.binlogArchiveEnabled = in.binlogArchiveEnabled();
+        t.binlogArchiveNodeId = in.binlogArchiveNodeId();
+        t.binlogArchiveMinutes = in.binlogArchiveMinutes();
+        audit.record(me.username(), "BINLOG_POLICY_UPDATE", "topology:" + t.id, "SUCCESS", t.tenantId, t.siteId,
+                "archivage=" + t.binlogArchiveEnabled + ", toutes les " + t.binlogArchiveMinutes + " min");
+        return t;
+    }
+
+    @GET @Path("/topologies/{id}/binlogs") @Transactional
+    public BinlogCatalog binlogCatalog(@PathParam("id") UUID id) {
+        Topology t = topology(id);
+        List<com.prestige.replica.domain.BinlogArchive> files = com.prestige.replica.domain.BinlogArchive
+                .<com.prestige.replica.domain.BinlogArchive>list("topologyId = ?1 ORDER BY firstEventAt DESC NULLS LAST, fileName DESC", t.id);
+        java.time.Instant from = files.stream().map(f -> f.firstEventAt).filter(java.util.Objects::nonNull).min(java.util.Comparator.naturalOrder()).orElse(null);
+        java.time.Instant until = files.stream().map(f -> f.lastEventAt).filter(java.util.Objects::nonNull).max(java.util.Comparator.naturalOrder()).orElse(null);
+        long total = files.stream().mapToLong(f -> f.sizeBytes == null ? 0 : f.sizeBytes).sum();
+        Operation last = Operation.find("topologyId = ?1 and type = ?2 ORDER BY requestedAt DESC", t.id, OperationType.BINLOG_ARCHIVE).firstResult();
+        return new BinlogCatalog(files.size() > 200 ? files.subList(0, 200) : files, from, until, total, t.binlogGapAt, t.binlogGapDetail, last);
+    }
+
+    @POST @Path("/topologies/{id}/pitr/plan") @Transactional
+    public com.prestige.replica.service.BinlogService.PitrPlan pitrPlan(@PathParam("id") UUID id, @Valid PitrPlanIn in) {
+        return binlogs.plan(topology(id), in.stopAt(), java.time.Instant.now());
+    }
+
+    @POST @Path("/topologies/{id}/pitr") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN})
+    public Operation pitr(@PathParam("id") UUID id, @Valid PitrIn in) {
+        return binlogs.requestPitr(topology(id), in.stopAt(), in.extract(), in.reason(), me.username());
     }
 
     // ---- Lot 3 : opérations contrôlées ---------------------------------------
@@ -207,6 +255,12 @@ public class OperationResource {
         if (nodeId != null) { q += " and nodeId = :node"; f.params().put("node", nodeId); }
         if (topologyId != null) { q += " and topologyId = :topo"; f.params().put("topo", topologyId); }
         if (type != null) { q += " and type = :type"; f.params().put("type", type); }
+        else {
+            // Archivages réussis (toutes les quelques minutes) : visibles via le filtre de type et la page Sauvegardes.
+            q += " and not (type = :archive and status = :ok)";
+            f.params().put("archive", OperationType.BINLOG_ARCHIVE);
+            f.params().put("ok", OperationStatus.SUCCEEDED);
+        }
         return Operation.find(q + " ORDER BY requestedAt DESC", f.params()).page(0, Math.max(1, Math.min(limit, 1000))).list();
     }
 

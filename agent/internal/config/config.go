@@ -45,6 +45,8 @@ type Config struct {
 	Provisioning ProvisioningConfig `json:"provisioning"`
 	// Lot 3 : pause/reprise, bascule planifiée, rattachement à une nouvelle source.
 	ReplicationControl ReplicationControlConfig `json:"replicationControl"`
+	// Archivage continu des binlogs du primaire (restauration à un instant précis).
+	BinlogArchive BinlogArchiveConfig `json:"binlogArchive"`
 	// Lot 4 : routeur de connexion (adresse stable pour Prestige).
 	Router router.Config `json:"router"`
 	// StateDir : état local persistant (marqueur d'isolement). Défaut : dossier du fichier de configuration.
@@ -84,6 +86,16 @@ type BackupConfig struct {
 	EncryptionKeyFile string `json:"encryptionKeyFile"`
 	// Parallel : threads de copie de mariadb-backup (défaut 2).
 	Parallel int `json:"parallel"`
+}
+
+// BinlogArchiveConfig : l'agent (en général celui du serveur de sauvegarde)
+// récupère les binlogs du primaire comme le ferait une réplique, les chiffre
+// et les range sous backup.root. Compte : REPLICATION SLAVE et BINLOG MONITOR.
+type BinlogArchiveConfig struct {
+	Enabled bool `json:"enabled"`
+	// À défaut, le compte de réplication (replicationControl puis provisioning).
+	User         string `json:"user"`
+	PasswordFile string `json:"passwordFile"`
 }
 
 // RestoreTestConfig active les restaurations de contrôle dans une instance isolée.
@@ -212,6 +224,9 @@ func (c *Config) Validate() error {
 	if c.RestoreTest.Enabled && (c.RestoreTest.ScratchDir == "" || c.Backup.Root == "" || c.Backup.EncryptionKeyFile == "") {
 		return errors.New("restoreTest : scratchDir, backup.root et backup.encryptionKeyFile sont obligatoires")
 	}
+	if c.BinlogArchive.Enabled && (c.Backup.Root == "" || c.Backup.EncryptionKeyFile == "") {
+		return errors.New("binlogArchive : backup.root et backup.encryptionKeyFile sont obligatoires")
+	}
 	if c.Provisioning.Enabled && (c.Provisioning.DataDir == "" || c.Provisioning.AdminUser == "" || c.Provisioning.ReplicationUser == "" ||
 		c.Backup.Root == "" || c.Backup.EncryptionKeyFile == "") {
 		return errors.New("provisioning : dataDir, adminUser, replicationUser, backup.root et backup.encryptionKeyFile sont obligatoires")
@@ -234,6 +249,12 @@ func (c *Config) Validate() error {
 	if rc.Enabled && (rc.AdminUser == "" || rc.ReplicationUser == "") {
 		return errors.New("replicationControl : adminUser et replicationUser sont obligatoires (ou ceux de provisioning)")
 	}
+	if ba := &c.BinlogArchive; ba.User == "" {
+		ba.User, ba.PasswordFile = rc.ReplicationUser, rc.ReplicationPasswordFile
+	}
+	if c.BinlogArchive.Enabled && c.BinlogArchive.User == "" {
+		return errors.New("binlogArchive : user obligatoire (ou le compte de réplication)")
+	}
 	return nil
 }
 
@@ -251,6 +272,9 @@ func (c *Config) Capabilities() []string {
 	}
 	if c.ReplicationControl.Enabled {
 		out = append(out, "replicationControl")
+	}
+	if c.BinlogArchive.Enabled {
+		out = append(out, "binlogArchive")
 	}
 	return out
 }

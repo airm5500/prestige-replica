@@ -13,6 +13,7 @@ export interface Topology {
   lagWarnSeconds: number; lagCritSeconds: number; diskWarnPct: number; diskCritPct: number; agentSilenceSeconds: number
   backupEnabled: boolean; backupNodeId: string | null; restoreNodeId: string | null; backupHour: number; backupKeep: number
   restoreTestWeekday: number; backupMaxAgeHours: number; drillMaxAgeDays: number
+  binlogArchiveEnabled: boolean; binlogArchiveMinutes: number; binlogArchiveNodeId: string | null; binlogGapAt: string | null; binlogGapDetail: string | null
 }
 export interface ChannelView {
   name: string; source: string; ioRunning: string; sqlRunning: string; lagSeconds: number | null; sqlDelay: number
@@ -45,6 +46,7 @@ export interface UserOut { id: string; username: string; role: string; tenantId:
 
 export type OperationType = 'PREFLIGHT' | 'BACKUP_FULL' | 'RESTORE_TEST' | 'BACKUP_PRUNE' | 'PROVISION_REPLICA'
   | 'REPLICATION_PAUSE' | 'REPLICATION_RESUME' | 'SWITCHOVER' | 'SWITCHOVER_DEMOTE' | 'SWITCHOVER_PROMOTE' | 'SWITCHOVER_UNDO' | 'REPLICA_ATTACH' | 'FAILOVER' | 'FENCE' | 'DRILL'
+  | 'BINLOG_ARCHIVE' | 'PITR_RESTORE'
 export type OperationStatus = 'AWAITING_APPROVAL' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'INTERVENTION_REQUIRED' | 'CANCELLED'
 export interface Operation {
   id: string; tenantId: string; siteId: string; topologyId: string | null; nodeId: string; type: OperationType; status: OperationStatus
@@ -82,6 +84,20 @@ export interface RestoreTest { id: string; backupId: string; operationId: string
 export interface BackupPolicy {
   backupEnabled: boolean; backupNodeId: string | null; restoreNodeId: string | null; backupHour: number; backupKeep: number
   restoreTestWeekday: number; backupMaxAgeHours: number
+}
+
+export interface BinlogFile {
+  id: string; serverId: number; fileName: string; relativePath: string; sizeBytes: number | null; firstGtid: string | null; lastGtid: string | null
+  firstEventAt: string | null; lastEventAt: string | null; complete: boolean; archivedAt: string
+}
+export interface BinlogCatalog {
+  files: BinlogFile[]; coveredFrom: string | null; coveredUntil: string | null; totalBytes: number
+  gapAt: string | null; gapDetail: string | null; lastRun: Operation | null
+}
+export interface PitrPlan {
+  ready: boolean; checks: Check[]; backupId: string | null; backupAt: string | null; backupGtid: string | null
+  executorId: string | null; executor: string | null; coveredUntil: string | null
+  binlogs: { relativePath: string; fileName: string; serverId: number; firstEventAt: string | null; lastEventAt: string | null }[]
 }
 
 /** Les colonnes JSON peuvent arriver sérialisées en texte. */
@@ -187,6 +203,12 @@ export const api = {
     request<Topology>('PUT', `api/v1/topologies/${topologyId}/drill-policy`, { drillMaxAgeDays }),
   declareManualFailover: (topologyId: string, b: { newPrimaryNodeId: string; topologyConfirmation: string }) =>
     request<void>('POST', `api/v1/topologies/${topologyId}/failover/declare-manual`, b),
+  binlogPolicy: (topologyId: string, b: { binlogArchiveEnabled: boolean; binlogArchiveNodeId: string | null; binlogArchiveMinutes: number }) =>
+    request<Topology>('PUT', `api/v1/topologies/${topologyId}/binlog-policy`, b),
+  binlogs: (topologyId: string) => request<BinlogCatalog>('GET', `api/v1/topologies/${topologyId}/binlogs`),
+  pitrPlan: (topologyId: string, stopAt: string) => request<PitrPlan>('POST', `api/v1/topologies/${topologyId}/pitr/plan`, { stopAt }),
+  pitr: (topologyId: string, b: { stopAt: string; extract: string[]; reason: string }) =>
+    request<Operation>('POST', `api/v1/topologies/${topologyId}/pitr`, b),
   switchoverPlan: (topologyId: string, targetNodeId: string) => request<SwitchoverPlan>('POST', `api/v1/topologies/${topologyId}/switchover/plan`, { targetNodeId }),
   switchover: (topologyId: string, b: { targetNodeId: string; reattachOldPrimary: boolean; topologyConfirmation: string }) =>
     request<Operation>('POST', `api/v1/topologies/${topologyId}/switchover`, b),

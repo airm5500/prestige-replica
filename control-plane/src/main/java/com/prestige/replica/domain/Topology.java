@@ -37,4 +37,13 @@ public class Topology extends PanacheEntityBase {
 
     /** Lot 4 : rappel si aucun exercice de bascule réussi depuis ce nombre de jours (0 = jamais). */
     @Column(name = "drill_max_age_days") public int drillMaxAgeDays = 90;
+
+    // Archivage continu des binlogs (restauration à un instant précis)
+    @Column(name = "binlog_archive_enabled") public boolean binlogArchiveEnabled;
+    @Column(name = "binlog_archive_minutes") public int binlogArchiveMinutes = 5;
+    /** Nœud qui archive ; à défaut, celui des sauvegardes. */
+    @Column(name = "binlog_archive_node_id") public UUID binlogArchiveNodeId;
+    /** Fichiers purgés sur la source avant archivage : pas de restauration à un instant dans cet intervalle. */
+    @Column(name = "binlog_gap_at") public Instant binlogGapAt;
+    @Column(name = "binlog_gap_detail") public String binlogGapDetail;
 }

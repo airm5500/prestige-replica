@@ -23,6 +23,9 @@
     "scratchDir": "D:\\PrestigeRestaurationTest",
     "bufferPoolMB": 512
   },
+  "binlogArchive": {
+    "enabled": false
+  },
   "provisioning": {
     "enabled": false,
     "dataDir": "C:\\Program Files\\MariaDB 10.6\\data",

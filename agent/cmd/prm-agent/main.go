@@ -50,6 +50,7 @@ CLI de secours (fonctionne sans console, avec la configuration locale) :
   prm-agent preflight -config agent.json [-role PRIMARY|REPLICA]
   prm-agent backup  -config agent.json      sauvegarde complète dans backup.root/local/<horodatage>
   prm-agent restore-test -config agent.json -dir <chemin relatif sous backup.root>
+  prm-agent decrypt -config agent.json -in <fichier .prmseal> -out <fichier>   déchiffre une extraction ou un binlog archivé
 
 Urgence, console injoignable (voir docs/procedure-urgence.md) :
   prm-agent fence   -config agent.json      isole CE serveur (lecture seule, connexions coupées)
@@ -67,7 +68,8 @@ func main() {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	cfgPath := fs.String("config", defaultConfigPath(), "fichier de configuration JSON")
 	asJSON := fs.Bool("json", false, "sortie JSON (status)")
-	outPath := fs.String("out", "", "fichier de sortie (keygen)")
+	outPath := fs.String("out", "", "fichier de sortie (keygen, decrypt)")
+	inPath := fs.String("in", "", "fichier chiffré (decrypt)")
 	role := fs.String("role", "PRIMARY", "rôle visé (preflight)")
 	relDir := fs.String("dir", "", "dossier relatif d'une sauvegarde (restore-test)")
 	_ = fs.Parse(os.Args[2:])
@@ -87,7 +89,7 @@ func main() {
 	case "router":
 		runRouterStandalone(*cfgPath, logger)
 		return
-	case "run", "status", "check", "preflight", "backup", "restore-test", "fence", "promote":
+	case "run", "status", "check", "preflight", "backup", "restore-test", "fence", "promote", "unfence", "decrypt":
 	default:
 		usage()
 		os.Exit(2)
@@ -145,6 +147,17 @@ func main() {
 		if !ok {
 			os.Exit(1)
 		}
+	case "decrypt":
+		if *inPath == "" || *outPath == "" {
+			fmt.Fprintln(os.Stderr, "usage : prm-agent decrypt -config agent.json -in fichier.prmseal -out fichier")
+			os.Exit(2)
+		}
+		if err := ops.DecryptFile(cfg.Backup.EncryptionKeyFile, *inPath, *outPath); err != nil {
+			fmt.Fprintln(os.Stderr, "Échec :", err)
+			os.Exit(1)
+		}
+		fmt.Println("Fichier déchiffré :", *outPath)
+		return
 	case "unfence":
 		r := &ops.Runner{Cfg: cfg, Monitor: db, Version: Version}
 		if !r.Fenced() {

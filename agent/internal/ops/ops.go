@@ -32,6 +32,9 @@ const (
 	TypeReplicaAttach     = "REPLICA_ATTACH"
 	// Lot 4
 	TypeFence = "FENCE"
+	// Archivage des binlogs et restauration à un instant précis
+	TypeBinlogArchive = "BINLOG_ARCHIVE"
+	TypePITR          = "PITR_RESTORE"
 )
 
 // Job est une opération reçue du Control Plane.
@@ -103,6 +106,24 @@ func (r *Runner) Execute(ctx context.Context, j Job, rep Reporter) (map[string]a
 			return nil, err
 		}
 		return r.Prune(p, rep)
+	case TypeBinlogArchive:
+		if !r.Cfg.BinlogArchive.Enabled {
+			return nil, errors.New("archivage des binlogs non activé localement (binlogArchive.enabled)")
+		}
+		var p BinlogArchiveParams
+		if err := decode(j.Params, &p); err != nil {
+			return nil, err
+		}
+		return r.ArchiveBinlogs(ctx, p, rep)
+	case TypePITR:
+		if !r.Cfg.RestoreTest.Enabled {
+			return nil, errors.New("restaurations isolées non activées localement (restoreTest.enabled)")
+		}
+		var p PITRParams
+		if err := decode(j.Params, &p); err != nil {
+			return nil, err
+		}
+		return r.PointInTimeRestore(ctx, p, rep)
 	case TypeReplicationPause, TypeReplicationResume, TypeSwitchoverDemote, TypeSwitchoverPromote, TypeSwitchoverUndo, TypeReplicaAttach, TypeFence:
 		if !r.Cfg.ReplicationControl.Enabled {
 			return nil, errors.New("pilotage de la réplication non autorisé localement (replicationControl.enabled) : opération refusée")

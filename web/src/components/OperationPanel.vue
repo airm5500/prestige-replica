@@ -149,6 +149,27 @@ const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '
         <dt>Clé</dt><dd class="mono">{{ result.manifest.keyId }}</dd>
       </dl>
     </template>
+    <template v-else-if="result && op.type === 'PITR_RESTORE'">
+      <h3>Restauration à un instant précis</h3>
+      <dl class="kv">
+        <dt>Instant visé</dt><dd>{{ date(result.stopAt) }}</dd>
+        <dt>Point de départ (sauvegarde)</dt><dd class="mono">{{ result.startGtid }}</dd>
+        <dt>Dernière transaction rejouée</dt><dd class="mono">{{ result.reachedGtid || '—' }}<span v-if="result.lastTransactionAt"> ({{ date(result.lastTransactionAt) }})</span></dd>
+        <dt>Transactions rejouées</dt><dd>{{ result.transactions }} depuis {{ result.binlogFiles }} journal(aux)</dd>
+        <dt>Durée</dt><dd>{{ duration(result.totalSeconds) }}</dd>
+      </dl>
+      <div v-if="(result.gaps ?? []).length" class="warn-box">Transactions absentes de l'archive : {{ result.gaps.join(' ; ') }}</div>
+      <template v-if="(result.extracted ?? []).length">
+        <h3>Tables extraites (chiffrées, dans le stockage des sauvegardes)</h3>
+        <table><thead><tr><th>Table</th><th>Fichier</th><th>Taille</th></tr></thead><tbody>
+          <tr v-for="x in result.extracted" :key="x.table"><td class="mono">{{ x.table }}</td><td class="mono small">{{ x.relativePath }}</td><td>{{ bytes(x.sizeBytes) }}</td></tr>
+        </tbody></table>
+        <p class="small">Pour lire un fichier, sur un serveur qui possède la clé de sauvegarde :</p>
+        <pre class="details">prm-agent decrypt -config agent.json -in "&lt;stockage&gt;\{{ result.extracted[0].relativePath.replaceAll('/', '\\') }}" -out {{ result.extracted[0].table }}.sql</pre>
+        <p class="muted small">Le fichier obtenu est un export SQL (CREATE TABLE + INSERT). Importez-le dans une base de travail, jamais directement
+          dans la production, puis recopiez les seules lignes à récupérer.</p>
+      </template>
+    </template>
     <details v-else-if="result && op.type !== 'SWITCHOVER' && op.type !== 'FAILOVER' && op.type !== 'DRILL'">
       <summary>Résultat détaillé</summary>
       <pre class="details">{{ JSON.stringify(result, null, 2) }}</pre>
