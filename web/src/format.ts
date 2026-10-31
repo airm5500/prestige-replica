@@ -45,6 +45,10 @@ export function pct(n: number | null | undefined): string {
 export const opTypeLabel: Record<OperationType, string> = {
   PREFLIGHT: 'Contrôle des prérequis', BACKUP_FULL: 'Sauvegarde complète', RESTORE_TEST: 'Restauration de contrôle',
   BACKUP_PRUNE: 'Purge des sauvegardes expirées', PROVISION_REPLICA: "Construction d'une réplique",
+  REPLICATION_PAUSE: 'Suspension de la réplication', REPLICATION_RESUME: 'Reprise de la réplication',
+  SWITCHOVER: 'Bascule planifiée du primaire', SWITCHOVER_DEMOTE: "Rétrogradation de l'ancien primaire",
+  SWITCHOVER_PROMOTE: 'Promotion de la nouvelle source', SWITCHOVER_UNDO: 'Retour arrière (ancien primaire rouvert)',
+  REPLICA_ATTACH: 'Rattachement à la source',
 }
 export const opStatusLabel: Record<OperationStatus, string> = {
   AWAITING_APPROVAL: 'En attente d\'approbation', QUEUED: 'En file', RUNNING: 'En cours', SUCCEEDED: 'Réussie',

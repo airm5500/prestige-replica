@@ -31,4 +31,6 @@ public class Operation extends PanacheEntityBase {
     @Column(name = "last_event_at") public Instant lastEventAt;
     public String error;
     @JdbcTypeCode(SqlTypes.JSON) public String result;
+    /** Opération parente (étape d'une bascule). */
+    @Column(name = "parent_id") public UUID parentId;
 }

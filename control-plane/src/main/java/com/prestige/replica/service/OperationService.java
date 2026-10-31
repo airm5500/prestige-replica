@@ -27,10 +27,22 @@ public class OperationService {
 
     @Inject ObjectMapper json;
     @Inject AuditService audit;
+    @Inject ReplicationService replication;
+
+    /** Types exécutés par un agent (les opérations parentes sont pilotées par la console). */
+    static final List<OperationType> AGENT_TYPES = Arrays.stream(OperationType.values()).filter(t -> !t.consoleOnly).toList();
 
     /** Dossier relatif d'une sauvegarde, identique côté stockage (§19.3). */
     public static String backupDir(UUID tenant, UUID site, UUID backup) {
         return "tenants/" + tenant + "/sites/" + site + "/backups/" + backup;
+    }
+
+    /** Étape d'une opération parente : déjà couverte par l'approbation de la parente. */
+    @Transactional(Transactional.TxType.MANDATORY)
+    public Operation requestChild(Operation parent, OperationType type, DatabaseNode node, Map<String, Object> params, String summary) {
+        Operation op = request(type, node, params, summary, parent.approvedBy == null ? SYSTEM : parent.approvedBy + " (bascule)");
+        op.parentId = parent.id;
+        return op;
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
@@ -76,11 +88,13 @@ public class OperationService {
         op.approvedAt = Instant.now();
         event(op, "INFO", "Approuvée par " + approver);
         audit.record(approver, "OPERATION_APPROVE", "operation:" + op.id, "SUCCESS", op.tenantId, op.siteId, op.type + " — " + op.summary);
+        if (op.type.consoleOnly) replication.start(op);
         return op;
     }
 
     @Transactional
     public Operation cancel(Operation op, String actor) {
+        if (op.parentId != null) throw new ClientErrorException("Étape d'une bascule : elle ne s'annule pas séparément", 409);
         if (op.status != OperationStatus.AWAITING_APPROVAL && op.status != OperationStatus.QUEUED) {
             throw new ClientErrorException("Seule une opération en attente peut être annulée (état " + op.status + ")", 409);
         }
@@ -99,8 +113,15 @@ public class OperationService {
     /** Opérations à exécuter : une seule à la fois par nœud. */
     @Transactional
     public List<Operation> pending(DatabaseNode node) {
-        if (Operation.count("nodeId = ?1 and status = ?2", node.id, OperationStatus.RUNNING) > 0) return List.of();
-        return Operation.find("nodeId = ?1 and status = ?2 ORDER BY requestedAt", node.id, OperationStatus.QUEUED).page(0, 1).list();
+        if (Operation.count("nodeId = ?1 and status = ?2 and type in ?3", node.id, OperationStatus.RUNNING, AGENT_TYPES) > 0) return List.of();
+        return Operation.find("nodeId = ?1 and status = ?2 and type in ?3 ORDER BY requestedAt", node.id, OperationStatus.QUEUED, AGENT_TYPES)
+                .page(0, 1).list();
+    }
+
+    @Transactional
+    public boolean switchoverRunning(UUID topologyId) {
+        return topologyId != null && Operation.count("topologyId = ?1 and type = ?2 and status = ?3", topologyId,
+                OperationType.SWITCHOVER, OperationStatus.RUNNING) > 0;
     }
 
     @Transactional
@@ -142,13 +163,14 @@ public class OperationService {
         applyEffects(op, result);
         audit.record("agent:" + node.agentTokenPrefix, "OPERATION_FINISH", "operation:" + op.id,
                 st == OperationStatus.SUCCEEDED ? "SUCCESS" : "FAILURE", op.tenantId, op.siteId, op.type + " " + st);
+        if (op.parentId != null) replication.onChildFinished(op);
     }
 
     /** Opérations sans nouvelle de l'agent : jamais considérées réussies (§11). */
     @Transactional
     public int markStale(Duration silence) {
         Instant limit = Instant.now().minus(silence);
-        List<Operation> stale = Operation.list("status = ?1 and lastEventAt < ?2", OperationStatus.RUNNING, limit);
+        List<Operation> stale = Operation.list("status = ?1 and lastEventAt < ?2 and type in ?3", OperationStatus.RUNNING, limit, AGENT_TYPES);
         for (Operation op : stale) {
             op.status = OperationStatus.INTERVENTION_REQUIRED;
             op.finishedAt = Instant.now();
@@ -158,6 +180,7 @@ public class OperationService {
                 Backup.update("status = ?1, finishedAt = ?2 where operationId = ?3 and status = ?4", Backup.Status.FAILED, Instant.now(), op.id, Backup.Status.RUNNING);
             }
             audit.record("system", "OPERATION_STALE", "operation:" + op.id, "FAILURE", op.tenantId, op.siteId, op.type.name());
+            if (op.parentId != null) replication.onChildFinished(op);
         }
         return stale.size();
     }
@@ -207,6 +230,20 @@ public class OperationService {
                         Backup.update("status = ?1 where relativeDir = ?2", Backup.Status.DELETED, d.asText());
                     }
                 }
+            }
+            case REPLICATION_PAUSE -> {
+                if (op.status != OperationStatus.SUCCEEDED) return;
+                DatabaseNode n = DatabaseNode.findById(op.nodeId);
+                n.replicationPausedAt = op.finishedAt;
+                n.replicationPausedBy = op.requestedBy;
+                n.replicationPauseReason = blankToNull(params.path("reason").asText(""));
+            }
+            case REPLICATION_RESUME, REPLICA_ATTACH -> {
+                if (op.status != OperationStatus.SUCCEEDED) return;
+                DatabaseNode n = DatabaseNode.findById(op.nodeId);
+                n.replicationPausedAt = null;
+                n.replicationPausedBy = null;
+                n.replicationPauseReason = null;
             }
             default -> { }
         }

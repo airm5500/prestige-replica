@@ -95,7 +95,7 @@ func main() {
 	}
 	defer db.Close()
 	col := &collector.Collector{DB: db, AgentVersion: Version, ExtraDiskPaths: cfg.ExtraDiskPaths,
-		Timeout: time.Duration(cfg.MariaDB.TimeoutSeconds) * time.Second}
+		Timeout: time.Duration(cfg.MariaDB.TimeoutSeconds) * time.Second, Capabilities: cfg.Capabilities()}
 
 	switch cmd {
 	case "status":
@@ -190,10 +190,10 @@ func run(ctx context.Context, cfg *config.Config, col *collector.Collector, runn
 	var nextAttempt time.Time
 
 	jobs := &jobWorker{client: cl, runner: runner, log: log}
+	if cl != nil {
+		go jobs.loop(ctx, time.Duration(cfg.JobPollSeconds)*time.Second)
+	}
 	tick := func() {
-		if cl != nil {
-			jobs.poll(ctx)
-		}
 		r := col.Collect(ctx)
 		if !r.Reachable {
 			log.Warn("MariaDB injoignable", "erreurs", r.Errors)

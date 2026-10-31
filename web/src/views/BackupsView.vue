@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api, type Backup, type BackupPolicy, type NodeSummary, type SiteSummary, type Topology } from '../api'
 import { useSession } from '../stores/session'
 import { bytes, date, duration, roleLabel, weekdayLabel } from '../format'
 
 const session = useSession()
 const router = useRouter()
+const route = useRoute()
 const fleet = ref<SiteSummary[]>([])
 const topologies = ref<Topology[]>([])
 const backups = ref<Backup[]>([])
@@ -35,6 +36,14 @@ async function load() {
     if (!topoChoices.value.some((t) => t.id === topoId.value)) topoId.value = topoChoices.value[0]?.id ?? ''
     backups.value = topoId.value ? await api.backups(topoId.value) : []
     error.value = ''
+    // Arrivée depuis « Reconstruire » sur la fiche d'une réplique.
+    const rebuild = route.query.rebuild as string | undefined
+    if (rebuild && !wizard.value) {
+      const t = fleet.value.flatMap((s) => s.topologies).find((x) => x.nodes.some((n) => n.id === rebuild))
+      if (t && t.id !== topoId.value) { topoId.value = t.id; return }
+      if (verified.value.length) { openWizard(); wizard.value!.targetNodeId = rebuild }
+      router.replace({ query: {} })
+    }
   } catch (e) { error.value = (e as Error).message }
 }
 watch(topoId, (v) => { localStorage.setItem('prm.backupTopo', v); policy.value = null; wizard.value = null; load() })
@@ -107,7 +116,7 @@ const statusLabel = { RUNNING: 'En cours', COMPLETED: 'Terminée', FAILED: 'Éch
         </dl>
         <button v-if="!policy && canPolicy" @click="editPolicy">Modifier</button>
         <form v-if="policy" class="form" @submit.prevent="savePolicy">
-          <label><input v-model="policy.backupEnabled" type="checkbox" /> Sauvegarde automatique quotidienne</label>
+          <label class="check"><input v-model="policy.backupEnabled" type="checkbox" /> Sauvegarde automatique quotidienne</label>
           <label>Nœud à sauvegarder (une réplique de préférence, pour ne pas charger le primaire)
             <select v-model="policy.backupNodeId"><option v-for="n in nodes" :key="n.id" :value="n.id">{{ n.name }} ({{ roleLabel[n.expectedRole] }})</option></select>
           </label>

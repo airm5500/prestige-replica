@@ -27,6 +27,9 @@ type Config struct {
 
 	// IntervalSeconds entre deux collectes (défaut 30 s).
 	IntervalSeconds int `json:"intervalSeconds"`
+	// JobPollSeconds : consultation des opérations en attente (défaut 5 s,
+	// accélérée à la demande de la console pendant une bascule).
+	JobPollSeconds int `json:"jobPollSeconds"`
 	// BufferSize : nombre maximal de rapports conservés hors connexion.
 	BufferSize int `json:"bufferSize"`
 	// ExtraDiskPaths : points de montage supplémentaires (binlogs, sauvegardes).
@@ -38,6 +41,23 @@ type Config struct {
 	Backup       BackupConfig       `json:"backup"`
 	RestoreTest  RestoreTestConfig  `json:"restoreTest"`
 	Provisioning ProvisioningConfig `json:"provisioning"`
+	// Lot 3 : pause/reprise, bascule planifiée, rattachement à une nouvelle source.
+	ReplicationControl ReplicationControlConfig `json:"replicationControl"`
+}
+
+// ReplicationControlConfig autorise le pilotage de la réplication de CE serveur
+// (STOP/START SLAVE, read_only, CHANGE MASTER). Ne remplace jamais de données.
+type ReplicationControlConfig struct {
+	Enabled bool `json:"enabled"`
+	// Compte administrateur local ; à défaut, celui de provisioning.
+	AdminUser         string `json:"adminUser"`
+	AdminPasswordFile string `json:"adminPasswordFile"`
+	// Compte de réplication utilisé pour se connecter à une nouvelle source.
+	ReplicationUser         string `json:"replicationUser"`
+	ReplicationPasswordFile string `json:"replicationPasswordFile"`
+	// ProtectedUsers : comptes dont les connexions ne sont jamais coupées lors
+	// d'une rétrogradation (en plus du compte administrateur et de supervision).
+	ProtectedUsers []string `json:"protectedUsers"`
 }
 
 // ToolsConfig indique où trouver les binaires MariaDB officiels.
@@ -129,6 +149,9 @@ func Load(path string) (*Config, error) {
 }
 
 func (c *Config) applyDefaults() {
+	if c.JobPollSeconds <= 0 || c.JobPollSeconds > 60 {
+		c.JobPollSeconds = 5
+	}
 	if c.IntervalSeconds <= 0 {
 		c.IntervalSeconds = 30
 	}
@@ -184,7 +207,35 @@ func (c *Config) Validate() error {
 		c.Backup.Root == "" || c.Backup.EncryptionKeyFile == "") {
 		return errors.New("provisioning : dataDir, adminUser, replicationUser, backup.root et backup.encryptionKeyFile sont obligatoires")
 	}
+	rc := &c.ReplicationControl
+	if rc.AdminUser == "" {
+		rc.AdminUser, rc.AdminPasswordFile = c.Provisioning.AdminUser, c.Provisioning.AdminPasswordFile
+	}
+	if rc.ReplicationUser == "" {
+		rc.ReplicationUser, rc.ReplicationPasswordFile = c.Provisioning.ReplicationUser, c.Provisioning.ReplicationPasswordFile
+	}
+	if rc.Enabled && (rc.AdminUser == "" || rc.ReplicationUser == "") {
+		return errors.New("replicationControl : adminUser et replicationUser sont obligatoires (ou ceux de provisioning)")
+	}
 	return nil
+}
+
+// Capabilities liste les capacités activées localement (affichées par la console).
+func (c *Config) Capabilities() []string {
+	out := []string{}
+	if c.Backup.Enabled {
+		out = append(out, "backup")
+	}
+	if c.RestoreTest.Enabled {
+		out = append(out, "restoreTest")
+	}
+	if c.Provisioning.Enabled {
+		out = append(out, "provisioning")
+	}
+	if c.ReplicationControl.Enabled {
+		out = append(out, "replicationControl")
+	}
+	return out
 }
 
 // ReadSecret lit un secret d'une ligne depuis un fichier protégé.

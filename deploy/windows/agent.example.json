@@ -7,7 +7,9 @@
     "passwordFile": "C:\\ProgramData\\PrestigeReplicaManager\\mariadb.password"
   },
   "intervalSeconds": 30,
-  "tools": { "binDir": "C:\\Program Files\\MariaDB 10.6\\bin" },
+  "tools": {
+    "binDir": "C:\\Program Files\\MariaDB 10.6\\bin"
+  },
   "backup": {
     "enabled": true,
     "root": "\\\\MINI-SERVEUR\\sauvegardes-prestige",
@@ -29,5 +31,14 @@
     "adminPasswordFile": "C:\\ProgramData\\PrestigeReplicaManager\\admin.password",
     "replicationUser": "prm_repl",
     "replicationPasswordFile": "C:\\ProgramData\\PrestigeReplicaManager\\repl.password"
+  },
+  "jobPollSeconds": 5,
+  "replicationControl": {
+    "enabled": false,
+    "adminUser": "prm_admin",
+    "adminPasswordFile": "C:\\ProgramData\\PrestigeReplicaManager\\admin.password",
+    "replicationUser": "prm_repl",
+    "replicationPasswordFile": "C:\\ProgramData\\PrestigeReplicaManager\\repl.password",
+    "protectedUsers": []
   }
 }

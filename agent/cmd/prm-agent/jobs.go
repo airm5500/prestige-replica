@@ -28,6 +28,7 @@ type jobWorker struct {
 	mu     sync.Mutex
 	busy   bool
 	wg     sync.WaitGroup
+	done   chan struct{} // signale la fin d'une opération (consultation immédiate)
 }
 
 type remoteReporter struct {
@@ -48,18 +49,38 @@ func (r remoteReporter) send(level, msg string) {
 func (r remoteReporter) Step(m string) { r.send("INFO", m) }
 func (r remoteReporter) Warn(m string) { r.send("WARN", m) }
 
-func (w *jobWorker) poll(ctx context.Context) {
+// loop consulte la console au rythme demandé et relance aussitôt après
+// chaque opération terminée (étapes enchaînées d'une bascule).
+func (w *jobWorker) loop(ctx context.Context, every time.Duration) {
+	w.done = make(chan struct{}, 1)
+	next := time.Duration(0)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(next):
+		case <-w.done:
+		}
+		hint := w.poll(ctx)
+		next = every
+		if hint > 0 && hint < next {
+			next = hint
+		}
+	}
+}
+
+func (w *jobWorker) poll(ctx context.Context) time.Duration {
 	w.mu.Lock()
 	if w.busy {
 		w.mu.Unlock()
-		return
+		return 0
 	}
 	w.mu.Unlock()
 	pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	jobs, err := w.client.PollJobs(pctx)
+	jobs, hint, err := w.client.PollJobs(pctx)
 	cancel()
 	if err != nil || len(jobs) == 0 {
-		return
+		return hint
 	}
 	j := jobs[0]
 	sctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -67,7 +88,7 @@ func (w *jobWorker) poll(ctx context.Context) {
 	cancel()
 	if err != nil {
 		w.log.Warn("opération non réclamée", "id", j.ID, "erreur", err.Error())
-		return
+		return hint
 	}
 	w.mu.Lock()
 	w.busy = true
@@ -75,7 +96,15 @@ func (w *jobWorker) poll(ctx context.Context) {
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
-		defer func() { w.mu.Lock(); w.busy = false; w.mu.Unlock() }()
+		defer func() {
+			w.mu.Lock()
+			w.busy = false
+			w.mu.Unlock()
+			select {
+			case w.done <- struct{}{}:
+			default:
+			}
+		}()
 		rep := remoteReporter{ctx: context.WithoutCancel(ctx), client: w.client, id: j.ID, log: w.log}
 		rep.Step("début de l'opération " + j.Type)
 		// Battement de cœur : la console sait que l'opération progresse.
@@ -114,6 +143,7 @@ func (w *jobWorker) poll(ctx context.Context) {
 			time.Sleep(time.Duration(min(60, 2*(attempt+1))) * time.Second)
 		}
 	}()
+	return hint
 }
 
 func (w *jobWorker) wait() { w.wg.Wait() }

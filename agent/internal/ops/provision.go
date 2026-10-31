@@ -115,7 +115,7 @@ func (r *Runner) Provision(ctx context.Context, p ProvisionParams, rep Reporter)
 	}
 
 	// 3. Configuration de la réplication.
-	admin, err := r.adminDB(adminPw)
+	admin, err := r.adminDB(r.Cfg.Provisioning.AdminUser, adminPw)
 	if err != nil {
 		return rollback(err)
 	}
@@ -169,9 +169,9 @@ func (r *Runner) refuseIfLooksPrimary(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) adminDB(password string) (*sql.DB, error) {
+func (r *Runner) adminDB(user, password string) (*sql.DB, error) {
 	mc := mysql.NewConfig()
-	mc.User = r.Cfg.Provisioning.AdminUser
+	mc.User = user
 	mc.Passwd = password
 	if strings.HasPrefix(r.Cfg.MariaDB.Address, "unix:") {
 		mc.Net, mc.Addr = "unix", strings.TrimPrefix(r.Cfg.MariaDB.Address, "unix:")

@@ -5,6 +5,8 @@ import com.prestige.replica.security.CurrentUser;
 import com.prestige.replica.service.AuditService;
 import com.prestige.replica.service.BackupService;
 import com.prestige.replica.service.OperationService;
+import com.prestige.replica.service.ReplicationService;
+import java.time.Instant;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
@@ -25,6 +27,7 @@ public class OperationResource {
     @Inject OperationService ops;
     @Inject BackupService backups;
     @Inject AuditService audit;
+    @Inject ReplicationService replication;
 
     public record ApproveIn(@NotBlank String confirmation) {}
     public record RestoreTestIn(UUID nodeId) {}
@@ -32,7 +35,11 @@ public class OperationResource {
                               @Min(0) @Max(604800) Integer delaySeconds, @NotBlank String topologyConfirmation) {}
     public record PolicyIn(boolean backupEnabled, UUID backupNodeId, UUID restoreNodeId, @Min(0) @Max(23) int backupHour,
                            @Min(1) @Max(365) int backupKeep, @Min(1) @Max(7) int restoreTestWeekday, @Min(2) @Max(240) int backupMaxAgeHours) {}
-    public record OperationView(Operation operation, List<OperationEvent> events, String nodeName, String siteCode) {}
+    public record OperationView(Operation operation, List<OperationEvent> events, String nodeName, String siteCode,
+                                String siteName, String topologyName, List<OperationView> steps) {}
+    public record PauseIn(@Pattern(regexp = "ALL|SQL") String mode, @NotBlank @Size(max = 300) String reason) {}
+    public record SwitchoverPlanIn(@NotNull UUID targetNodeId) {}
+    public record SwitchoverIn(@NotNull UUID targetNodeId, boolean reattachOldPrimary, @NotBlank String topologyConfirmation) {}
 
     static final String[] OPERATORS = {Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN};
 
@@ -91,6 +98,46 @@ public class OperationResource {
         return t;
     }
 
+    // ---- Lot 3 : opérations contrôlées ---------------------------------------
+
+    @POST @Path("/nodes/{id}/replication/pause") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN})
+    public Operation pause(@PathParam("id") UUID id, @Valid PauseIn in) {
+        return replication.pause(node(id), in.mode(), in.reason(), me.username());
+    }
+
+    @POST @Path("/nodes/{id}/replication/resume") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN})
+    public Operation resume(@PathParam("id") UUID id) {
+        return replication.resume(node(id), me.username());
+    }
+
+    /** Rattache une réplique (par exemple l'ancien primaire isolé après une bascule) au primaire actuel. */
+    @POST @Path("/nodes/{id}/replication/attach") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN})
+    public Operation attach(@PathParam("id") UUID id) {
+        DatabaseNode n = node(id);
+        if (n.expectedRole != NodeRole.REPLICA && n.expectedRole != NodeRole.DELAYED_REPLICA) {
+            throw new BadRequestException("Seul un nœud déclaré réplique peut être rattaché");
+        }
+        DatabaseNode primary = backups.primaryOf(n.topologyId);
+        if (primary == null) throw new BadRequestException("Aucun primaire déclaré dans la topologie");
+        String[] hp = com.prestige.replica.service.BackupService.hostPortOf(primary.addressLabel);
+        return replication.attach(n, primary, hp, me.username());
+    }
+
+    @GET @Path("/nodes/{id}/repair-plan") @Transactional
+    public ReplicationService.RepairPlan repairPlan(@PathParam("id") UUID id) {
+        return replication.repairPlan(node(id), Instant.now());
+    }
+
+    @POST @Path("/topologies/{id}/switchover/plan") @Transactional
+    public ReplicationService.SwitchoverPlan switchoverPlan(@PathParam("id") UUID id, @Valid SwitchoverPlanIn in) {
+        return replication.plan(topology(id), node(in.targetNodeId()), Instant.now());
+    }
+
+    @POST @Path("/topologies/{id}/switchover") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN})
+    public Operation switchover(@PathParam("id") UUID id, @Valid SwitchoverIn in) {
+        return replication.requestSwitchover(topology(id), node(in.targetNodeId()), in.reattachOldPrimary(), in.topologyConfirmation(), me.username());
+    }
+
     // ---- Suivi -------------------------------------------------------------
 
     @GET @Path("/backups") @Transactional
@@ -127,10 +174,18 @@ public class OperationResource {
 
     @GET @Path("/operations/{id}") @Transactional
     public OperationView operation(@PathParam("id") UUID id) {
-        Operation op = op(id);
+        return view(op(id), true);
+    }
+
+    static OperationView view(Operation op, boolean withSteps) {
         DatabaseNode n = DatabaseNode.findById(op.nodeId);
         Site s = Site.findById(op.siteId);
-        return new OperationView(op, OperationEvent.list("operationId = ?1 ORDER BY id", op.id), n == null ? null : n.name, s == null ? null : s.code);
+        Topology t = op.topologyId == null ? null : Topology.findById(op.topologyId);
+        List<OperationView> steps = withSteps
+                ? Operation.<Operation>list("parentId = ?1 ORDER BY requestedAt", op.id).stream().map(c -> view(c, false)).toList()
+                : List.of();
+        return new OperationView(op, OperationEvent.list("operationId = ?1 ORDER BY id", op.id), n == null ? null : n.name,
+                s == null ? null : s.code, s == null ? null : s.name, t == null ? null : t.name, steps);
     }
 
     @POST @Path("/operations/{id}/approve") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.APPROVER})

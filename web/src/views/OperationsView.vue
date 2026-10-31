@@ -15,7 +15,8 @@ const error = ref('')
 let timer: number | undefined
 
 const selected = computed(() => (route.query.op as string | undefined) ?? '')
-const visible = computed(() => ops.value.filter((o) => !session.activeSiteId || o.siteId === session.activeSiteId))
+// Les étapes d'une bascule sont affichées dans le détail de l'opération parente.
+const visible = computed(() => ops.value.filter((o) => !o.parentId && (!session.activeSiteId || o.siteId === session.activeSiteId)))
 const awaiting = computed(() => visible.value.filter((o) => o.status === 'AWAITING_APPROVAL').length)
 const siteCode = (id: string) => session.sites.find((s) => s.id === id)?.code ?? '?'
 

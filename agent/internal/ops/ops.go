@@ -23,6 +23,13 @@ const (
 	TypeRestoreTest      = "RESTORE_TEST"
 	TypeProvisionReplica = "PROVISION_REPLICA"
 	TypeBackupPrune      = "BACKUP_PRUNE"
+	// Lot 3
+	TypeReplicationPause  = "REPLICATION_PAUSE"
+	TypeReplicationResume = "REPLICATION_RESUME"
+	TypeSwitchoverDemote  = "SWITCHOVER_DEMOTE"
+	TypeSwitchoverPromote = "SWITCHOVER_PROMOTE"
+	TypeSwitchoverUndo    = "SWITCHOVER_UNDO"
+	TypeReplicaAttach     = "REPLICA_ATTACH"
 )
 
 // Job est une opération reçue du Control Plane.
@@ -94,8 +101,52 @@ func (r *Runner) Execute(ctx context.Context, j Job, rep Reporter) (map[string]a
 			return nil, err
 		}
 		return r.Prune(p, rep)
+	case TypeReplicationPause, TypeReplicationResume, TypeSwitchoverDemote, TypeSwitchoverPromote, TypeSwitchoverUndo, TypeReplicaAttach:
+		if !r.Cfg.ReplicationControl.Enabled {
+			return nil, errors.New("pilotage de la réplication non autorisé localement (replicationControl.enabled) : opération refusée")
+		}
+		return r.control(ctx, j, rep)
 	default:
 		return nil, fmt.Errorf("type d'opération non autorisé : %q", j.Type)
+	}
+}
+
+func (r *Runner) control(ctx context.Context, j Job, rep Reporter) (map[string]any, error) {
+	switch j.Type {
+	case TypeReplicationPause:
+		var p PauseParams
+		if err := decode(j.Params, &p); err != nil {
+			return nil, err
+		}
+		return r.Pause(ctx, p, rep)
+	case TypeReplicationResume:
+		if err := decode(j.Params, &struct{}{}); err != nil {
+			return nil, err
+		}
+		return r.Resume(ctx, rep)
+	case TypeSwitchoverDemote:
+		var p DemoteParams
+		if err := decode(j.Params, &p); err != nil {
+			return nil, err
+		}
+		return r.Demote(ctx, p, rep)
+	case TypeSwitchoverPromote:
+		var p PromoteParams
+		if err := decode(j.Params, &p); err != nil {
+			return nil, err
+		}
+		return r.Promote(ctx, p, rep)
+	case TypeSwitchoverUndo:
+		if err := decode(j.Params, &struct{}{}); err != nil {
+			return nil, err
+		}
+		return r.UndoDemote(ctx, rep)
+	default: // TypeReplicaAttach
+		var p AttachParams
+		if err := decode(j.Params, &p); err != nil {
+			return nil, err
+		}
+		return r.Attach(ctx, p, rep)
 	}
 }
 

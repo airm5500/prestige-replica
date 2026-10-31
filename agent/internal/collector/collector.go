@@ -44,6 +44,7 @@ type Collector struct {
 	AgentVersion   string
 	ExtraDiskPaths []string
 	Timeout        time.Duration
+	Capabilities   []string
 }
 
 // Collect construit un rapport. Il ne renvoie jamais d'erreur : les problèmes
@@ -60,6 +61,7 @@ func (c *Collector) Collect(ctx context.Context) report.Report {
 		Channels:      []report.Channel{},
 		Disks:         []report.Disk{},
 		Errors:        []string{},
+		Capabilities:  c.Capabilities,
 	}
 	timeout := c.Timeout
 	if timeout <= 0 {

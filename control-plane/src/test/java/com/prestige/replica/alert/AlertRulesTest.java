@@ -26,7 +26,7 @@ class AlertRulesTest {
     }
 
     static AgentReport report(AgentReport.Server s, List<AgentReport.Channel> ch, List<AgentReport.Disk> disks) {
-        return new AgentReport(1, "0.1.0", NOW, "h", "linux", "amd64", true, s, null, ch, disks, List.of());
+        return new AgentReport(1, "0.1.0", NOW, "h", "linux", "amd64", List.of(), true, s, null, ch, disks, List.of());
     }
 
     static List<String> types(List<Finding> f) { return f.stream().map(Finding::type).toList(); }
@@ -86,14 +86,14 @@ class AlertRulesTest {
 
     @Test
     void replicaChecks() {
-        var r = report(server(false, true, "ROW", 1), List.of(), List.of());
+        var r = report(server(false, true, "ROW", 0), List.of(), List.of());
         var f = types(AlertRules.evaluate(NodeRole.REPLICA, r, NOW, NOW, T));
         assertTrue(f.containsAll(List.of("REPLICA_WRITABLE", "REPLICA_NO_CHANNEL", "SERVER_ID")));
     }
 
     @Test
     void unreachableMariaDb() {
-        var r = new AgentReport(1, "0.1.0", NOW, "h", "linux", "amd64", false, null, null, List.of(), List.of(), List.of("connexion refusée"));
+        var r = new AgentReport(1, "0.1.0", NOW, "h", "linux", "amd64", List.of(), false, null, null, List.of(), List.of(), List.of("connexion refusée"));
         assertEquals(List.of("MARIADB_UNREACHABLE"), types(AlertRules.evaluate(NodeRole.PRIMARY, r, NOW, NOW, T)));
     }
 

@@ -99,3 +99,24 @@ type nopRep struct{}
 
 func (nopRep) Step(string) {}
 func (nopRep) Warn(string) {}
+
+func TestControlRequiresLocalOptIn(t *testing.T) {
+	r := &Runner{Cfg: &config.Config{}}
+	for _, typ := range []string{TypeReplicationPause, TypeReplicationResume, TypeSwitchoverDemote, TypeSwitchoverPromote, TypeSwitchoverUndo, TypeReplicaAttach} {
+		_, err := r.Execute(context.Background(), Job{Type: typ, Params: []byte(`{}`)}, nopRep{})
+		if err == nil || !strings.Contains(err.Error(), "replicationControl.enabled") {
+			t.Errorf("%s accepté sans replicationControl.enabled : %v", typ, err)
+		}
+	}
+	r.Cfg.ReplicationControl.Enabled = true
+	// Paramètres inattendus refusés avant toute connexion.
+	if _, err := r.Execute(context.Background(), Job{Type: TypeSwitchoverPromote, Params: []byte(`{"gtid":"0-1-1","sql":"DROP"}`)}, nopRep{}); err == nil {
+		t.Error("champ inconnu accepté")
+	}
+	if _, err := r.Execute(context.Background(), Job{Type: TypeReplicationPause, Params: []byte(`{"mode":"IO; DROP"}`)}, nopRep{}); err == nil {
+		t.Error("mode de pause invalide accepté")
+	}
+	if _, err := r.Execute(context.Background(), Job{Type: TypeReplicaAttach, Params: []byte(`{"sourceHost":"a'b","sourcePort":3306}`)}, nopRep{}); err == nil {
+		t.Error("hôte invalide accepté")
+	}
+}

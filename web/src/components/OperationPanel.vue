@@ -36,6 +36,7 @@ async function act(fn: () => Promise<unknown>) {
 const approve = () => act(() => api.approve(props.id, confirmation.value))
 const cancel = () => act(() => api.cancelOperation(props.id))
 const copy = (t: string) => navigator.clipboard?.writeText(t)
+const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '—' : `${(ms / 1000).toFixed(1).replace('.', ',')} s`)
 </script>
 
 <template>
@@ -55,6 +56,13 @@ const copy = (t: string) => navigator.clipboard?.writeText(t)
       <template v-if="params.delaySeconds"> avec un retard volontaire de {{ duration(params.delaySeconds) }}</template>.
     </div>
 
+    <div v-if="op.type === 'SWITCHOVER'" class="warn-box">
+      <strong>Bascule du primaire de {{ view?.topologyName }}.</strong> Les écritures de Prestige seront interrompues quelques secondes :
+      l'ancien primaire passe en lecture seule et ses connexions sont coupées, puis <code>{{ params.newAddress }}</code> devient la source
+      une fois toutes les transactions appliquées. Si une étape échoue, l'ancien primaire est rouvert en écriture.
+      Après la bascule, Prestige doit être pointé vers <code>{{ params.newAddress }}</code>.
+    </div>
+
     <form v-if="canApprove" class="toolbar" @submit.prevent="approve">
       <label>Pour approuver, ressaisissez le code de la pharmacie ({{ view?.siteCode }})
         <input v-model="confirmation" autocomplete="off" required />
@@ -67,6 +75,29 @@ const copy = (t: string) => navigator.clipboard?.writeText(t)
     <p v-if="canCancel"><button class="danger" @click="cancel">Annuler l'opération</button></p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="op.error" class="error">{{ op.error }}</p>
+
+    <template v-if="op.type === 'SWITCHOVER' && result">
+      <h3>Bilan</h3>
+      <dl class="kv">
+        <dt>Primaire actuel</dt><dd class="mono">{{ result.newPrimary }}</dd>
+        <dt>Écritures interrompues</dt><dd>{{ seconds(result.writeUnavailableMs) }}</dd>
+        <dt>Durée totale</dt><dd>{{ duration(result.totalSeconds) }}</dd>
+        <dt>Dernière transaction de l'ancien primaire</dt><dd class="mono">{{ result.finalGtid ?? '—' }}</dd>
+        <dt>Position de la nouvelle source</dt><dd class="mono">{{ result.newPrimaryGtid ?? '—' }}</dd>
+      </dl>
+    </template>
+
+    <template v-if="view?.steps?.length">
+      <h3>Étapes</h3>
+      <ol class="steps">
+        <li v-for="st in view.steps" :key="st.operation.id">
+          <span class="badge" :class="opStatusClass[st.operation.status]">{{ opStatusLabel[st.operation.status] }}</span>
+          <strong>{{ opTypeLabel[st.operation.type] }}</strong> — {{ st.nodeName }}
+          <div class="muted small">{{ st.events.at(-1)?.message }}</div>
+          <div v-if="st.operation.error" class="error small">{{ st.operation.error }}</div>
+        </li>
+      </ol>
+    </template>
 
     <template v-if="result && op.type === 'PREFLIGHT'">
       <h3>Prérequis {{ result.ready ? '— prêt' : '— corrections nécessaires' }}</h3>
@@ -94,11 +125,12 @@ const copy = (t: string) => navigator.clipboard?.writeText(t)
         <dt>Clé</dt><dd class="mono">{{ result.manifest.keyId }}</dd>
       </dl>
     </template>
-    <details v-else-if="result">
+    <details v-else-if="result && op.type !== 'SWITCHOVER'">
       <summary>Résultat détaillé</summary>
       <pre class="details">{{ JSON.stringify(result, null, 2) }}</pre>
     </details>
 
+    <p><RouterLink :to="`/operations/${op.id}/report`">Rapport d'opération imprimable →</RouterLink></p>
     <h3>Journal</h3>
     <ol class="events">
       <li v-for="e in view?.events ?? []" :key="e.id" :class="e.level.toLowerCase()">

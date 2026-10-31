@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { api, type Incident, type NodeMetric, type NodeSummary, type Operation, type Site, type Topology } from '../api'
+import { api, type Incident, type NodeMetric, type NodeSummary, type Operation, type RepairPlan, type Site, type Topology } from '../api'
+import { useRouter } from 'vue-router'
 import OperationPanel from '../components/OperationPanel.vue'
 import { useSession } from '../stores/session'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -20,6 +21,25 @@ const ops = ref<Operation[]>([])
 const shownOp = ref('')
 const session = useSession()
 const canOperate = computed(() => session.can('SUPER_ADMIN', 'SITE_ADMIN', 'OPERATOR'))
+const router = useRouter()
+const repair = ref<RepairPlan | null>(null)
+const pauseMode = ref<'ALL' | 'SQL'>('ALL')
+const pauseReason = ref('')
+const isReplica = computed(() => summary.value?.expectedRole === 'REPLICA' || summary.value?.expectedRole === 'DELAYED_REPLICA')
+const canControl = computed(() => !!summary.value?.capabilities?.includes('replicationControl'))
+const unhealthy = computed(() => {
+  const s = summary.value
+  if (!s || !isReplica.value) return false
+  return !!s.replicationPausedAt || !s.channels.length || s.channels.some((c) => c.ioRunning !== 'Yes' || c.sqlRunning !== 'Yes' || c.lastIoErrno || c.lastSqlErrno)
+})
+async function loadRepair() {
+  repair.value = unhealthy.value ? await api.repairPlan(props.id).catch(() => null) : null
+}
+function doRepair(action: string) {
+  if (action === 'RESUME') start(api.resume)
+  else if (action === 'REBUILD') router.push({ path: '/backups', query: { rebuild: props.id } })
+}
+const pause = () => start((id) => api.pause(id, pauseMode.value, pauseReason.value)).then(() => { pauseReason.value = '' })
 let timer: number | undefined
 
 async function load() {
@@ -32,6 +52,7 @@ async function load() {
     topology.value = d.topology
     metrics.value = await api.metrics(props.id, hours.value)
     ops.value = await api.operations({ nodeId: props.id, limit: 10 })
+    await loadRepair()
     if (!shownOp.value) shownOp.value = ops.value.find((o) => o.type === 'PREFLIGHT')?.id ?? ''
     error.value = ''
   } catch (e) { error.value = (e as Error).message }
@@ -77,6 +98,42 @@ const config = computed(() => {
       <button @click="start(api.preflight)">Vérifier les prérequis</button>
       <button @click="start(api.backupNow)">Sauvegarder maintenant</button>
       <RouterLink to="/backups">Sauvegardes et répliques →</RouterLink>
+    </div>
+
+    <div v-if="isReplica" class="card">
+      <h2>Réplication</h2>
+      <div v-if="summary.replicationPausedAt" class="pause-box" role="status">
+        Suspendue par <strong>{{ summary.replicationPausedBy }}</strong> le {{ date(summary.replicationPausedAt) }}
+        <span v-if="summary.replicationPauseReason"> — {{ summary.replicationPauseReason }}</span>.
+        Les alertes « thread arrêté » sont remplacées par ce rappel jusqu'à la reprise.
+      </div>
+      <div v-if="repair" class="warn-box">
+        <strong>{{ repair.diagnosis }}</strong>
+        <p class="small">{{ repair.detail }}</p>
+        <ul class="plain">
+          <li v-for="a in repair.actions" :key="a.id">
+            <button v-if="canOperate && a.id !== 'WAIT'" :class="a.recommended ? 'primary' : ''" :disabled="a.id === 'REBUILD' && !repair.eligibleBackups.length"
+                    @click="doRepair(a.id)">{{ a.label }}</button>
+            <strong v-else>{{ a.label }}</strong>
+            <span v-if="a.recommended" class="badge healthy">recommandé</span>
+            <div class="muted small">{{ a.detail }}</div>
+          </li>
+        </ul>
+      </div>
+      <template v-if="canOperate && canControl">
+        <div class="toolbar">
+          <button v-if="summary.replicationPausedAt" class="primary" @click="start(api.resume)">Reprendre la réplication</button>
+          <button v-if="!summary.channels.length" @click="start(api.attach)" title="Brancher ce serveur sur le primaire actuel de la topologie">Rattacher au primaire</button>
+        </div>
+        <form v-if="!summary.replicationPausedAt && summary.channels.length" class="toolbar" @submit.prevent="pause">
+          <label>Suspendre
+            <select v-model="pauseMode"><option value="ALL">toute la réplication</option><option value="SQL">l'application seulement (les journaux continuent d'arriver)</option></select>
+          </label>
+          <label>Motif <input v-model="pauseReason" required maxlength="300" placeholder="ex. sauvegarde à froid, inventaire" /></label>
+          <button type="submit">Suspendre</button>
+        </form>
+      </template>
+      <p v-else-if="canOperate" class="muted small">Pilotage non autorisé sur ce serveur : activer <code>replicationControl</code> dans son agent.json.</p>
     </div>
 
     <div v-if="ops.length" class="grid2">

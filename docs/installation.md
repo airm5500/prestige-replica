@@ -1,4 +1,4 @@
-# Installation (Lots 1 et 2)
+# Installation (Lots 1 à 3)
 
 ## 1. Compte de supervision MariaDB
 
@@ -98,7 +98,7 @@ GRANT REPLICATION SLAVE ON *.* TO 'prm_repl'@'%';
 CREATE USER 'prm_admin'@'127.0.0.1' IDENTIFIED BY '<mot-de-passe-long>';
 -- MariaDB 10.6 : SUPER est nécessaire pour SET GLOBAL read_only
 GRANT RELOAD, SUPER, REPLICATION SLAVE ADMIN, SLAVE MONITOR, REPLICATION MASTER ADMIN ON *.* TO 'prm_admin'@'127.0.0.1';
--- MariaDB 10.11 et plus : remplacer SUPER par READ_ONLY ADMIN
+-- MariaDB 10.11 et plus : remplacer SUPER par READ_ONLY ADMIN, CONNECTION ADMIN
 ```
 
 Aucun de ces comptes n'a de droit sur les tables de Prestige (`SELECT`, `INSERT`…).
@@ -128,3 +128,27 @@ prm-agent preflight    -config agent.json -role REPLICA
 prm-agent backup       -config agent.json            → backup.root\local\<horodatage>
 prm-agent restore-test -config agent.json -dir local\<horodatage>
 ```
+
+## 6. Pause, reprise et bascule planifiée (Lot 3)
+
+Activer `replicationControl.enabled: true` dans l'`agent.json` de **chaque** serveur de la topologie (primaire compris) : sans cette autorisation locale, la console ne peut ni suspendre, ni basculer, ni rattacher ce serveur. Les comptes `prm_admin` et `prm_repl` du §5.2 sont réutilisés (par défaut ceux de `provisioning`).
+
+```json
+"replicationControl": {
+  "enabled": true,
+  "adminUser": "prm_admin",
+  "adminPasswordFile": "C:\\ProgramData\\PrestigeReplicaManager\\admin.password",
+  "replicationUser": "prm_repl",
+  "replicationPasswordFile": "C:\\ProgramData\\PrestigeReplicaManager\\repl.password",
+  "protectedUsers": []
+}
+```
+
+Points à vérifier avant la première bascule :
+
+1. **Le compte de Prestige ne doit pas avoir le privilège `SUPER`** (ni `READ_ONLY ADMIN` en 10.11). Sinon `read_only` ne bloque pas ses écritures : l'agent le détecte (les positions GTID continuent d'avancer), annule la bascule et rouvre l'ancien primaire. Vérification : `SHOW GRANTS FOR 'prestige'@'%';`.
+2. Chaque nœud doit avoir son **adresse hôte:port** renseignée dans la console : c'est l'adresse que prendront les autres répliques, et que Prestige devra utiliser après la bascule.
+3. Après une bascule réussie, **faire pointer Prestige vers le nouveau primaire** (l'adresse est rappelée dans le rapport). L'automatisation de cette étape (DNS, IP virtuelle ou proxy) relève du Lot 4.
+4. `protectedUsers` : comptes techniques dont les connexions ne doivent pas être coupées lors de la rétrogradation (outil de supervision tiers, par exemple). Les comptes de l'agent le sont toujours.
+
+L'agent consulte la console toutes les 5 s (`jobPollSeconds`), et chaque seconde pendant une bascule.

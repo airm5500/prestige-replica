@@ -66,8 +66,9 @@ public final class AlertRules {
             if (s.logBin() && s.binlogFormat() != null && !"ROW".equalsIgnoreCase(s.binlogFormat())) {
                 out.add(Finding.of("BINLOG_FORMAT", Severity.INFO, "binlog_format=" + s.binlogFormat() + " : ROW est recommandé pour la réplication, l'audit et le flashback"));
             }
-            if (s.serverId() == 0 || (s.serverId() == 1 && replicaRole)) {
-                out.add(Finding.of("SERVER_ID", Severity.WARNING, "server_id=" + s.serverId() + " : valeur par défaut, à rendre unique dans la topologie"));
+            // server_id=1 sur une réplique est normal après une bascule ; un doublon est signalé par DUPLICATE_SERVER_ID.
+            if (s.serverId() == 0) {
+                out.add(Finding.of("SERVER_ID", Severity.WARNING, "server_id=0 : ce serveur ne peut ni répliquer ni servir de source, définir un server_id unique"));
             }
             if (s.logBin() && s.binlogExpireSeconds() > 0 && s.binlogExpireSeconds() < 86400) {
                 out.add(Finding.of("BINLOG_RETENTION", Severity.WARNING, "Rétention des binlogs inférieure à 24 h : une coupure prolongée imposera une reconstruction"));

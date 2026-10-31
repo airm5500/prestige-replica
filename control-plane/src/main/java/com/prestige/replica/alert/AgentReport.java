@@ -16,6 +16,7 @@ public record AgentReport(
         String hostname,
         String os,
         String arch,
+        List<String> capabilities,
         boolean reachable,
         Server server,
         Binlogs binlogs,
@@ -25,6 +26,7 @@ public record AgentReport(
 
     public List<Channel> channelsOrEmpty() { return channels == null ? List.of() : channels; }
     public List<Disk> disksOrEmpty() { return disks == null ? List.of() : disks; }
+    public List<String> capabilitiesOrEmpty() { return capabilities == null ? List.of() : capabilities; }
     public List<String> errorsOrEmpty() { return errors == null ? List.of() : errors; }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

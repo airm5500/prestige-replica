@@ -51,10 +51,15 @@ public class AgentResource {
 
     @GET
     @Path("/jobs")
-    public java.util.List<JobOut> jobs(@HeaderParam(HttpHeaders.AUTHORIZATION) String authorization) {
+    public jakarta.ws.rs.core.Response jobs(@HeaderParam(HttpHeaders.AUTHORIZATION) String authorization) {
         DatabaseNode node = auth.authenticate(authorization, routing);
-        return operations.pending(node).stream()
+        java.util.List<JobOut> out = operations.pending(node).stream()
                 .map(o -> new JobOut(o.id, o.type.name(), operations.read(o.params))).toList();
+        var r = jakarta.ws.rs.core.Response.ok(out);
+        // Pendant une bascule, les agents de la topologie consultent chaque seconde :
+        // les écritures ne restent pas suspendues le temps d'un cycle de consultation.
+        if (operations.switchoverRunning(node.topologyId)) r.header("X-Prm-Poll-Seconds", "1");
+        return r.build();
     }
 
     @POST

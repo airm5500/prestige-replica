@@ -28,4 +28,8 @@ public class DatabaseNode extends PanacheEntityBase {
     @Column(name = "last_report_at") public Instant lastReportAt;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "last_report") public String lastReport;
     @Column(name = "created_at") public Instant createdAt = Instant.now();
+    /** Pause volontaire de la réplication (Lot 3). */
+    @Column(name = "replication_paused_at") public Instant replicationPausedAt;
+    @Column(name = "replication_paused_by") public String replicationPausedBy;
+    @Column(name = "replication_pause_reason") public String replicationPauseReason;
 }

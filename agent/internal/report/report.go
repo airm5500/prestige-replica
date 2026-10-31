@@ -17,6 +17,10 @@ type Report struct {
 	OS            string    `json:"os"`
 	Arch          string    `json:"arch"`
 
+	// Capabilities : opérations activées localement (backup, restoreTest,
+	// provisioning, replicationControl).
+	Capabilities []string `json:"capabilities,omitempty"`
+
 	Reachable bool      `json:"reachable"`
 	Server    *Server   `json:"server,omitempty"`
 	Binlogs   *Binlogs  `json:"binlogs,omitempty"`

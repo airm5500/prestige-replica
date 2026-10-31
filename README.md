@@ -4,7 +4,7 @@ Application autonome pour **superviser, puis à terme déployer, réparer et aud
 
 L'application pilote les mécanismes natifs de MariaDB (binlog, GTID, `mariadb-backup`) ; elle ne réimplémente jamais la réplication. Si la console s'arrête, la réplication MariaDB continue.
 
-> **État : Lots 1 et 2.** Observation du parc (lecture seule) ; sauvegardes `mariadb-backup` chiffrées et vérifiées par restauration ; construction assistée d'une réplique avec double approbation. Détails : [docs/perimetre-lot1.md](docs/perimetre-lot1.md), [docs/perimetre-lot2.md](docs/perimetre-lot2.md).
+> **État : Lots 1 à 3.** Observation du parc (lecture seule) ; sauvegardes `mariadb-backup` chiffrées et vérifiées par restauration ; construction assistée d'une réplique ; pause/reprise, réparation guidée et bascule planifiée sans perte avec double approbation et rapport d'opération. Détails : [lot 1](docs/perimetre-lot1.md), [lot 2](docs/perimetre-lot2.md), [lot 3](docs/perimetre-lot3.md).
 
 ![Accueil du parc](docs/images/parc.png)
 
@@ -83,4 +83,15 @@ POST /api/v1/topologies/{id}/replicas/provision    demande de construction (ress
 GET  /api/v1/operations?status=active   GET /api/v1/operations/{id}
 POST /api/v1/operations/{id}/approve  {confirmation: code pharmacie}   POST …/cancel
 GET  /api/v1/agent/jobs   POST /api/v1/agent/jobs/{id}/start|events|finish   (côté agent)
+```
+
+Lot 3 :
+
+```text
+POST /api/v1/nodes/{id}/replication/pause   {mode: ALL|SQL, reason}
+POST /api/v1/nodes/{id}/replication/resume
+POST /api/v1/nodes/{id}/replication/attach         rattacher au primaire actuel (ancien primaire isolé)
+GET  /api/v1/nodes/{id}/repair-plan                diagnostic et actions proposées
+POST /api/v1/topologies/{id}/switchover/plan       contrôles préalables
+POST /api/v1/topologies/{id}/switchover            demande de bascule (approbation requise)
 ```

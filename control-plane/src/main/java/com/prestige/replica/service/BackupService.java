@@ -77,6 +77,12 @@ public class BackupService {
         if (b.verifyStatus != Backup.Verify.VERIFIED) throw new BadRequestException("Sauvegarde non vérifiée : lancez d'abord une restauration de contrôle");
         if (b.gtid == null) throw new BadRequestException("Sauvegarde sans position GTID (journal binaire désactivé sur la source ?)");
         String[] hp = hostPort(primary.addressLabel);
+        AgentReport prep = monitoring.parse(primary.lastReport);
+        long retention = prep == null || prep.server() == null ? 0 : prep.server().binlogExpireSeconds();
+        if (retention > 0 && Duration.between(b.startedAt, Instant.now()).getSeconds() > retention - 3600) {
+            throw new BadRequestException("Sauvegarde trop ancienne : le primaire a probablement déjà purgé les binlogs nécessaires (rétention "
+                    + retention / 3600 + " h). Faites une nouvelle sauvegarde vérifiée.");
+        }
         if (delaySeconds < 0 || delaySeconds > 7 * 86400) throw new BadRequestException("Délai invalide");
         if (target.expectedRole == NodeRole.DELAYED_REPLICA && delaySeconds == 0) {
             throw new BadRequestException("Une réplique différée exige un délai (par exemple 21600 s = 6 h)");
@@ -100,6 +106,8 @@ public class BackupService {
                 "Reconstruire " + target.name + " depuis la sauvegarde du " + b.startedAt.toString().substring(0, 16).replace('T', ' ')
                         + " UTC, source " + primary.name + " (" + primary.addressLabel + ")", actor);
     }
+
+    public static String[] hostPortOf(String label) { return hostPort(label); }
 
     static String[] hostPort(String label) {
         if (label == null || !label.matches("[A-Za-z0-9.\\-]+:\\d{1,5}")) {

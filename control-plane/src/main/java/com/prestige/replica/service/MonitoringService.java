@@ -6,6 +6,7 @@ import com.prestige.replica.alert.AgentReport;
 import com.prestige.replica.alert.AlertRules;
 import com.prestige.replica.alert.Finding;
 import com.prestige.replica.domain.DatabaseNode;
+import com.prestige.replica.domain.Severity;
 import com.prestige.replica.domain.NodeMetric;
 import com.prestige.replica.domain.Topology;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -18,6 +19,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.jboss.logging.Logger;
 
@@ -80,9 +82,33 @@ public class MonitoringService {
         if (topo != null && topo.maintenance) {
             findings = List.of(); // fenêtre de maintenance : aucun incident ouvert ni notifié
         } else {
-            findings = AlertRules.evaluate(node.expectedRole, parse(node.lastReport), node.lastSeenAt, now, thresholds(topo));
+            AgentReport report = parse(node.lastReport);
+            findings = AlertRules.evaluate(node.expectedRole, report, node.lastSeenAt, now, thresholds(topo));
+            findings = applyPause(node, report, findings);
         }
         incidents.reconcile(IncidentService.Scope.node(node.tenantId, node.siteId, node.topologyId, node.id), findings, now);
+    }
+
+    static final Set<String> PAUSE_MASKED = Set.of("IO_THREAD_STOPPED", "SQL_THREAD_STOPPED", "REPLICATION_LAG");
+
+    /**
+     * Pause volontaire : les alertes « thread arrêté » et « retard » laissent
+     * place à un rappel unique. Si la réplication a été relancée hors console,
+     * la pause est levée.
+     */
+    static List<Finding> applyPause(DatabaseNode node, AgentReport r, List<Finding> findings) {
+        if (node.replicationPausedAt == null) return findings;
+        if (r != null && r.collectedAt() != null && r.collectedAt().isAfter(node.replicationPausedAt)
+                && !r.channelsOrEmpty().isEmpty() && r.channelsOrEmpty().stream().allMatch(c -> c.ioUp() && c.sqlUp())) {
+            node.replicationPausedAt = null;
+            node.replicationPausedBy = null;
+            node.replicationPauseReason = null;
+            return findings;
+        }
+        List<Finding> out = new ArrayList<>(findings.stream().filter(f -> !PAUSE_MASKED.contains(f.type())).toList());
+        out.add(new Finding("REPLICATION_PAUSED", "", Severity.WARNING, "Réplication suspendue par " + node.replicationPausedBy
+                + (node.replicationPauseReason == null ? "" : " : " + node.replicationPauseReason), "Depuis " + node.replicationPausedAt));
+        return out;
     }
 
     void evaluateTopology(UUID topologyId, Instant now) {

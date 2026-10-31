@@ -24,7 +24,8 @@ export interface NodeSummary {
   status: Health; lastSeenAt: string | null; lastReportAt: string | null; reachable: boolean; version: string | null
   serverId: number | null; readOnly: boolean | null; gtidCurrentPos: string | null; gtidSlavePos: string | null
   channels: ChannelView[]; minDiskFreePct: number | null; agentVersion: string | null; agentTokenPrefix: string
-  openIncidents: number; worstSeverity: Severity | null
+  openIncidents: number; worstSeverity: Severity | null; capabilities: string[]
+  replicationPausedAt: string | null; replicationPausedBy: string | null; replicationPauseReason: string | null
 }
 export interface TopologySummary { id: string; name: string; mode: string; maintenance: boolean; status: Health; primary: string | null; rpoSecondsEstimate: number | null; nodes: NodeSummary[] }
 export interface SiteSummary {
@@ -42,14 +43,25 @@ export interface NotificationChannel { id: string; tenantId: string; siteId: str
 export interface UserOut { id: string; username: string; role: string; tenantId: string | null; siteId: string | null; displayName: string | null; enabled: boolean }
 
 export type OperationType = 'PREFLIGHT' | 'BACKUP_FULL' | 'RESTORE_TEST' | 'BACKUP_PRUNE' | 'PROVISION_REPLICA'
+  | 'REPLICATION_PAUSE' | 'REPLICATION_RESUME' | 'SWITCHOVER' | 'SWITCHOVER_DEMOTE' | 'SWITCHOVER_PROMOTE' | 'SWITCHOVER_UNDO' | 'REPLICA_ATTACH'
 export type OperationStatus = 'AWAITING_APPROVAL' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'INTERVENTION_REQUIRED' | 'CANCELLED'
 export interface Operation {
   id: string; tenantId: string; siteId: string; topologyId: string | null; nodeId: string; type: OperationType; status: OperationStatus
   params: unknown; summary: string; requiresApproval: boolean; requestedBy: string; requestedAt: string; approvedBy: string | null
   approvedAt: string | null; startedAt: string | null; finishedAt: string | null; lastEventAt: string | null; error: string | null; result: unknown
+  parentId: string | null
 }
 export interface OperationEvent { id: number; operationId: string; at: string; level: 'INFO' | 'WARN' | 'ERROR'; message: string }
-export interface OperationView { operation: Operation; events: OperationEvent[]; nodeName: string; siteCode: string }
+export interface OperationView {
+  operation: Operation; events: OperationEvent[]; nodeName: string; siteCode: string; siteName: string | null
+  topologyName: string | null; steps: OperationView[]
+}
+export interface Check { id: string; status: 'OK' | 'WARN' | 'FAIL'; message: string }
+export interface SwitchoverPlan { ready: boolean; checks: Check[]; oldPrimary: string | null; target: string | null; newSource: string | null; repointed: string[] }
+export interface RepairPlan {
+  diagnosis: string; detail: string; eligibleBackups: string[]
+  actions: { id: 'RESUME' | 'REBUILD' | 'WAIT'; label: string; detail: string; recommended: boolean }[]
+}
 export interface Backup {
   id: string; siteId: string; topologyId: string | null; nodeId: string; operationId: string | null; kind: string; relativeDir: string
   status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'DELETED'; startedAt: string; finishedAt: string | null; sizeBytes: number | null
@@ -149,4 +161,13 @@ export const api = {
   operation: (id: string) => request<OperationView>('GET', `api/v1/operations/${id}`),
   approve: (id: string, confirmation: string) => request<Operation>('POST', `api/v1/operations/${id}/approve`, { confirmation }),
   cancelOperation: (id: string) => request<Operation>('POST', `api/v1/operations/${id}/cancel`),
+
+  // Lot 3 : opérations contrôlées
+  pause: (nodeId: string, mode: 'ALL' | 'SQL', reason: string) => request<Operation>('POST', `api/v1/nodes/${nodeId}/replication/pause`, { mode, reason }),
+  resume: (nodeId: string) => request<Operation>('POST', `api/v1/nodes/${nodeId}/replication/resume`),
+  attach: (nodeId: string) => request<Operation>('POST', `api/v1/nodes/${nodeId}/replication/attach`),
+  repairPlan: (nodeId: string) => request<RepairPlan>('GET', `api/v1/nodes/${nodeId}/repair-plan`),
+  switchoverPlan: (topologyId: string, targetNodeId: string) => request<SwitchoverPlan>('POST', `api/v1/topologies/${topologyId}/switchover/plan`, { targetNodeId }),
+  switchover: (topologyId: string, b: { targetNodeId: string; reattachOldPrimary: boolean; topologyConfirmation: string }) =>
+    request<Operation>('POST', `api/v1/topologies/${topologyId}/switchover`, b),
 }
