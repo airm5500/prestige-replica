@@ -49,6 +49,7 @@ onUnmounted(() => window.removeEventListener('prm:unauthorized', onUnauthorized)
         <RouterLink to="/">Parc</RouterLink>
         <RouterLink to="/incidents">Incidents</RouterLink>
         <RouterLink to="/backups">Sauvegardes</RouterLink>
+        <RouterLink to="/journaux">Journaux</RouterLink>
         <RouterLink to="/switchover">Bascule</RouterLink>
         <RouterLink to="/operations">Opérations</RouterLink>
         <RouterLink v-if="session.me.role !== 'READ_ONLY'" to="/audit">Audit</RouterLink>

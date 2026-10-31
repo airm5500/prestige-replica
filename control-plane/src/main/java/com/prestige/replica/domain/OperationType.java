@@ -28,6 +28,8 @@ public enum OperationType {
 
     // Archivage des binlogs et restauration à un instant précis
     BINLOG_ARCHIVE(false, "Archivage des journaux binaires"),
+    /** Lecture seule de l'archive : vue d'audit des transactions (qui a modifié quoi, quand). */
+    BINLOG_SEARCH(false, "Recherche dans les journaux binaires"),
     /** Ne touche jamais la production : instance isolée, extraction chiffrée. */
     PITR_RESTORE(false, "Restauration à un instant précis (isolée)");
 

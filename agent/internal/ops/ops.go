@@ -115,6 +115,15 @@ func (r *Runner) Execute(ctx context.Context, j Job, rep Reporter) (map[string]a
 			return nil, err
 		}
 		return r.ArchiveBinlogs(ctx, p, rep)
+	case TypeBinlogSearch:
+		if !r.Cfg.BinlogArchive.Enabled {
+			return nil, errors.New("archive des journaux non activée localement (binlogArchive.enabled)")
+		}
+		var p BinlogSearchParams
+		if err := decode(j.Params, &p); err != nil {
+			return nil, err
+		}
+		return r.SearchBinlogs(ctx, p, rep)
 	case TypePITR:
 		if !r.Cfg.RestoreTest.Enabled {
 			return nil, errors.New("restaurations isolées non activées localement (restoreTest.enabled)")

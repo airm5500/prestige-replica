@@ -14,6 +14,7 @@ const router = createRouter({
     { path: '/operations/:id/report', component: () => import('./views/ReportView.vue'), props: true },
     { path: '/switchover', component: () => import('./views/SwitchoverView.vue') },
     { path: '/backups', component: () => import('./views/BackupsView.vue') },
+    { path: '/journaux', component: () => import('./views/JournalsView.vue') },
     { path: '/audit', component: () => import('./views/AuditView.vue') },
     { path: '/settings', component: () => import('./views/SettingsView.vue') },
   ],

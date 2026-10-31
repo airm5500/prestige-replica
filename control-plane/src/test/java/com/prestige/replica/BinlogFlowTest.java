@@ -205,4 +205,67 @@ class BinlogFlowTest {
         admin().get("/api/v1/topologies/" + topo + "/binlogs").then().body("files.size()", is(2)).body("gapAt", notNullValue());
         Assertions.assertTrue(findings(Instant.now()).stream().anyMatch(f -> f.type().equals("BINLOG_ARCHIVE_GAP")));
     }
+
+    @Inject com.prestige.replica.service.Jobs jobs;
+
+    @Test @Order(6)
+    @SuppressWarnings("unchecked")
+    void searchInArchivedJournals() {
+        String tenant = admin().get("/api/v1/topologies").then().extract().path("find { it.id == '" + topo + "' }.tenantId");
+        admin().body(Map.of("username", "lecteur.jrn", "password", "mot-de-passe-tres-long", "role", "READ_ONLY", "tenantId", tenant))
+                .post("/api/v1/users").then().statusCode(200);
+        Map<String, Object> q = new HashMap<>(Map.of("from", NOW.minus(Duration.ofHours(1)).toString(), "to", NOW.toString(),
+                "tables", List.of("prestige.vente"), "types", List.of("DELETE"), "text", "", "reason", "ventes disparues"));
+        as("lecteur.jrn").body(q).post("/api/v1/topologies/" + topo + "/binlog-search").then().statusCode(403);
+        q.put("reason", "");
+        as("op.jrn").body(q).post("/api/v1/topologies/" + topo + "/binlog-search").then().statusCode(400);
+        q.put("reason", "ventes disparues");
+        q.put("types", List.of("TRUNCATE"));
+        as("op.jrn").body(q).post("/api/v1/topologies/" + topo + "/binlog-search").then().statusCode(400);
+        q.put("types", List.of("DELETE"));
+        q.put("from", NOW.minus(Duration.ofDays(40)).toString());
+        as("op.jrn").body(q).post("/api/v1/topologies/" + topo + "/binlog-search").then().statusCode(400);
+        // Période antérieure à l'archive : rien à lire.
+        q.put("from", NOW.minus(Duration.ofDays(3)).toString());
+        q.put("to", NOW.minus(Duration.ofDays(2)).toString());
+        as("op.jrn").body(q).post("/api/v1/topologies/" + topo + "/binlog-search").then().statusCode(400);
+        q.put("from", NOW.minus(Duration.ofHours(1)).toString());
+        q.put("to", NOW.toString());
+        String op = as("op.jrn").body(q).post("/api/v1/topologies/" + topo + "/binlog-search").then().statusCode(200)
+                .body("type", is("BINLOG_SEARCH")).extract().path("id");
+        Map<String, Object> p = run("B", "BINLOG_SEARCH", "SUCCEEDED", Map.of("total", 1, "rows", 3, "transactions", List.of(Map.of(
+                "gtid", "0-1-150", "at", NOW.minus(Duration.ofMinutes(30)).toString(), "serverId", 1, "file", "mysql-bin.000003", "pos", 4242,
+                "queries", List.of("DELETE FROM vente WHERE jour = '2026-10-30'"),
+                "changes", List.of(Map.of("type", "DELETE", "database", "prestige", "table", "vente", "rows", 3,
+                        "sample", List.of(Map.of("before", List.of("@1=17", "@2='Dupont'")))))))));
+        // Seul le fichier encore actif (couvrant la dernière heure) est lu.
+        Assertions.assertEquals(List.of("x/1/mysql-bin.000003.prmseal"), ((List<Map<String, Object>>) p.get("binlogs")).stream().map(m -> m.get("relativePath")).toList());
+        Assertions.assertTrue(((String) p.get("resultDir")).contains("/searches/"));
+        // Liste : jamais de données ; détail : selon le rôle.
+        admin().get("/api/v1/operations?type=BINLOG_SEARCH").then().body("find { it.id == '" + op + "' }.result", nullValue());
+        as("op.jrn").get("/api/v1/operations/" + op).then().body("operation.result", containsString("Dupont"));
+        as("lecteur.jrn").get("/api/v1/operations/" + op).then().body("operation.result", not(containsString("Dupont")))
+                .body("operation.result", not(containsString("2026-10-30"))).body("operation.result", containsString("\"masked\":true"));
+        // Le masquage ne modifie pas ce qui est enregistré.
+        as("op.jrn").get("/api/v1/operations/" + op).then().body("operation.result", containsString("Dupont"));
+        admin().get("/api/v1/audit").then().body("details", hasItem(containsString("ventes disparues")));
+        jobs.purgeSearchResults(Instant.now().plus(Duration.ofDays(1)));
+        as("op.jrn").get("/api/v1/operations/" + op).then().body("operation.result", not(containsString("Dupont")));
+    }
+
+    @Test @Order(7)
+    void restoreExactlyBeforeATransaction() {
+        Instant at = NOW.minus(Duration.ofMinutes(150));
+        Map<String, Object> q = new HashMap<>(Map.of("stopAt", at.toString(), "extract", List.of("prestige.vente"), "reason", "avant la suppression",
+                "stopBefore", Map.of("relativePath", "x/1/mysql-bin.000002.prmseal", "position", 4242, "gtid", "0-1-90")));
+        // La sauvegarde de départ (0-1-100) contient déjà cette transaction.
+        as("op.jrn").body(q).post("/api/v1/topologies/" + topo + "/pitr").then().statusCode(400).body("message", containsString("contient déjà"));
+        q.put("stopBefore", Map.of("relativePath", "x/1/autre.000009.prmseal", "position", 4242, "gtid", "0-1-110"));
+        as("op.jrn").body(q).post("/api/v1/topologies/" + topo + "/pitr").then().statusCode(400);
+        q.put("stopBefore", Map.of("relativePath", "x/1/mysql-bin.000002.prmseal", "position", 4242, "gtid", "0-1-110"));
+        as("op.jrn").body(q).post("/api/v1/topologies/" + topo + "/pitr").then().statusCode(200).body("summary", containsString("juste avant la transaction 0-1-110"));
+        var job = agent("B").get("/api/v1/agent/jobs").then().body("[0].type", is("PITR_RESTORE")).extract();
+        Assertions.assertEquals(List.of("x/1/mysql-bin.000002.prmseal"), job.path("[0].params.binlogs.relativePath"));
+        Assertions.assertEquals(4242, (int) job.path("[0].params.stopBefore.position"));
+    }
 }

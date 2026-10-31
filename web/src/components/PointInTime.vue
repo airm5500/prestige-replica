@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api, type BinlogCatalog, type NodeSummary, type PitrPlan, type Topology } from '../api'
 import { bytes, date } from '../format'
 
 const props = defineProps<{ topo: Topology; nodes: NodeSummary[]; canOperate: boolean; canPolicy: boolean }>()
 const emit = defineEmits<{ changed: [] }>()
 const router = useRouter()
+const route = useRoute()
 
 const catalog = ref<BinlogCatalog | null>(null)
 const error = ref('')
 const message = ref('')
 const editing = ref<{ binlogArchiveEnabled: boolean; binlogArchiveNodeId: string | null; binlogArchiveMinutes: number } | null>(null)
 const form = ref<{ at: string; tables: string; reason: string } | null>(null)
+/** Transaction repérée dans l'explorateur : arrêt exact juste avant elle. */
+const stopBefore = ref<{ relativePath: string; position: number; gtid: string; at: string } | null>(null)
 const plan = ref<PitrPlan | null>(null)
 const showFiles = ref(false)
 let timer: number | undefined
@@ -31,7 +34,20 @@ async function load() {
   } catch (e) { error.value = (e as Error).message }
 }
 watch(() => props.topo.id, () => { catalog.value = null; editing.value = null; form.value = null; plan.value = null; load() })
-onMounted(() => { load(); timer = window.setInterval(load, 15_000) })
+onMounted(() => {
+  load()
+  timer = window.setInterval(load, 15_000)
+  // Arrivée depuis l'explorateur des journaux : « Restaurer juste avant » cette transaction.
+  const at = route.query.pitr as string | undefined
+  if (at && !Number.isNaN(Date.parse(at))) {
+    const pos = Number(route.query.pitrPos)
+    if (route.query.pitrFile && pos > 0 && route.query.pitrGtid) {
+      stopBefore.value = { relativePath: String(route.query.pitrFile), position: pos, gtid: String(route.query.pitrGtid), at: localInput(new Date(at)) }
+    }
+    form.value = { at: localInput(new Date(at)), tables: String(route.query.pitrTables ?? ''), reason: `Revenir avant la transaction ${route.query.pitrGtid ?? ''}`.trim() }
+    router.replace({ query: {} })
+  }
+})
 onUnmounted(() => window.clearInterval(timer))
 
 function edit() {
@@ -56,6 +72,7 @@ function localInput(d: Date) {
 }
 function openForm() {
   form.value = { at: localInput(new Date(Date.now() - 15 * 60_000)), tables: '', reason: '' }
+  stopBefore.value = null
   plan.value = null
 }
 const stopAt = computed(() => (form.value?.at ? new Date(form.value.at).toISOString() : ''))
@@ -67,12 +84,16 @@ async function check() {
   plan.value = null
   try { plan.value = await api.pitrPlan(props.topo.id, stopAt.value) } catch (e) { error.value = (e as Error).message }
 }
-watch(() => form.value?.at, () => { plan.value = null })
+watch(() => form.value?.at, (v) => {
+  plan.value = null
+  if (stopBefore.value && v !== stopBefore.value.at) stopBefore.value = null // autre instant choisi à la main
+})
 
 async function submit() {
   error.value = ''
   try {
-    const op = await api.pitr(props.topo.id, { stopAt: stopAt.value, extract: tables.value, reason: form.value!.reason })
+    const op = await api.pitr(props.topo.id, { stopAt: stopAt.value, extract: tables.value, reason: form.value!.reason,
+      stopBefore: stopBefore.value ? { relativePath: stopBefore.value.relativePath, position: stopBefore.value.position, gtid: stopBefore.value.gtid } : null })
     form.value = null
     plan.value = null
     router.push({ path: '/operations', query: { op: op.id } })
@@ -134,6 +155,8 @@ const statusText = { OK: 'OK', WARN: 'Attention', FAIL: 'Bloquant' } as const
         <label>Instant visé (heure de ce poste ; tout ce qui a été validé avant est restauré)
           <input v-model="form.at" type="datetime-local" step="1" required />
         </label>
+        <p v-if="stopBefore" class="ok small">Arrêt exact juste avant la transaction <span class="mono">{{ stopBefore.gtid }}</span>
+          repérée dans les journaux : les autres transactions de la même seconde sont rejouées.</p>
         <label>Tables à extraire (base.table, séparées par des virgules ; vide = vérification seulement)
           <input v-model="form.tables" placeholder="prestige.vente, prestige.vente_ligne" autocomplete="off" />
         </label>

@@ -386,6 +386,16 @@ type PITRParams struct {
 	StopAt     time.Time      `json:"stopAt"`
 	Extract    []string       `json:"extract"`
 	ExtractDir string         `json:"extractDir"`
+	// StopBefore : arrêt exact juste avant une transaction repérée dans
+	// l'explorateur des journaux (plus précis que la seconde de StopAt).
+	StopBefore *StopPoint `json:"stopBefore,omitempty"`
+}
+
+// StopPoint désigne une transaction par son fichier archivé et la position de son événement GTID.
+type StopPoint struct {
+	RelativePath string `json:"relativePath"`
+	Position     int64  `json:"position"`
+	GTID         string `json:"gtid"`
 }
 
 var tableRe = regexp.MustCompile(`^[A-Za-z0-9_$]{1,64}\.[A-Za-z0-9_$]{1,64}$`)
@@ -422,6 +432,15 @@ func (r *Runner) PointInTimeRestore(ctx context.Context, p PITRParams, rep Repor
 	for _, t := range p.Extract {
 		if !tableRe.MatchString(t) {
 			return nil, fmt.Errorf("table invalide : %q (forme base.table)", t)
+		}
+	}
+	if sp := p.StopBefore; sp != nil {
+		inChain := false
+		for _, b := range p.Binlogs {
+			inChain = inChain || b.RelativePath == sp.RelativePath
+		}
+		if !inChain || sp.Position <= 4 || !gtidRe.MatchString(sp.GTID) {
+			return nil, errors.New("point d'arrêt invalide")
 		}
 	}
 	if len(p.Extract) > 0 && !relPathRe.MatchString(p.ExtractDir) {
@@ -498,13 +517,20 @@ func (r *Runner) PointInTimeRestore(ctx context.Context, p PITRParams, rep Repor
 		var startAt int64 = -1
 		var fileMax int64 = applied
 		pastStop := false
+		stopFile := p.StopBefore != nil && b.RelativePath == p.StopBefore.RelativePath
+		stopFound := false
 		n := 0
 		if _, _, err := eachGTID(ctx, binlogTool, local, func(g gtidPos) bool {
+			if stopFile && g.at >= p.StopBefore.Position {
+				stopFound = g.at == p.StopBefore.Position && fmt.Sprintf("%d-%d-%d", g.domain, g.server, g.seq) == p.StopBefore.GTID
+				pastStop = true
+				return false
+			}
 			if g.domain != domain || g.seq <= applied {
 				return true
 			}
 			// --stop-datetime s'arrête au premier événement daté à cette seconde ou après.
-			if !g.when.Before(p.StopAt.Truncate(time.Second)) {
+			if p.StopBefore == nil && !g.when.Before(p.StopAt.Truncate(time.Second)) {
 				pastStop = true
 				return false
 			}
@@ -526,8 +552,15 @@ func (r *Runner) PointInTimeRestore(ctx context.Context, p PITRParams, rep Repor
 		}); err != nil {
 			return nil, err
 		}
+		if stopFile && !stopFound {
+			return nil, fmt.Errorf("transaction %s introuvable à la position %d de %s : restauration annulée", p.StopBefore.GTID, p.StopBefore.Position, base)
+		}
+		stopArg := "--stop-datetime=" + stopLocal
+		if stopFile {
+			stopArg = "--stop-position=" + strconv.FormatInt(p.StopBefore.Position, 10)
+		}
 		if startAt >= 0 {
-			skipped, err := replay(ctx, binlogTool, client, local, startAt, stopLocal, port)
+			skipped, err := replay(ctx, binlogTool, client, local, startAt, stopArg, port)
 			if err != nil {
 				return nil, fmt.Errorf("rejeu de %s : %w", filepath.Base(local), err)
 			}
@@ -540,7 +573,7 @@ func (r *Runner) PointInTimeRestore(ctx context.Context, p PITRParams, rep Repor
 			events += n
 		}
 		os.Remove(local)
-		if pastStop {
+		if pastStop || stopFile {
 			break
 		}
 	}
@@ -593,7 +626,7 @@ func (r *Runner) PointInTimeRestore(ctx context.Context, p PITRParams, rep Repor
 	}
 	res := map[string]any{
 		"backupId": m.BackupID, "startGtid": startGTID, "reachedGtid": lastGTID, "binlogFiles": files, "transactions": events,
-		"stopAt": p.StopAt.UTC(), "checks": checks, "gaps": gaps, "skippedAccountStatements": accountStmts, "extracted": extracted, "totalSeconds": int(time.Since(t0).Seconds()),
+		"stopAt": p.StopAt.UTC(), "checks": checks, "gaps": gaps, "skippedAccountStatements": accountStmts, "stopBefore": p.StopBefore, "extracted": extracted, "totalSeconds": int(time.Since(t0).Seconds()),
 	}
 	if events > 0 {
 		res["lastTransactionAt"] = lastApplied.UTC()
@@ -602,12 +635,12 @@ func (r *Runner) PointInTimeRestore(ctx context.Context, p PITRParams, rep Repor
 }
 
 // replay applique un binlog local à partir d'une position, jusqu'à l'heure d'arrêt.
-func replay(ctx context.Context, binlogTool, client, file string, startAt int64, stopLocal, port string) (int, error) {
+func replay(ctx context.Context, binlogTool, client, file string, startAt int64, stopArg, port string) (int, error) {
 	pr, pw := io.Pipe()
 	errc := make(chan error, 1)
 	go func() {
 		_, err := run(ctx, pw, nil, binlogTool, "--no-defaults", "--start-position="+strconv.FormatInt(startAt, 10),
-			"--stop-datetime="+stopLocal, file)
+			stopArg, file)
 		pw.CloseWithError(err)
 		errc <- err
 	}()

@@ -47,7 +47,8 @@ public class OperationResource {
     public record ManualFailoverIn(@NotNull UUID newPrimaryNodeId, @NotBlank String topologyConfirmation) {}
     public record BinlogPolicyIn(boolean binlogArchiveEnabled, UUID binlogArchiveNodeId, @Min(1) @Max(60) int binlogArchiveMinutes) {}
     public record PitrPlanIn(@NotNull java.time.Instant stopAt) {}
-    public record PitrIn(@NotNull java.time.Instant stopAt, List<String> extract, @NotBlank @Size(max = 300) String reason) {}
+    public record PitrIn(@NotNull java.time.Instant stopAt, List<String> extract, @NotBlank @Size(max = 300) String reason,
+                         com.prestige.replica.service.BinlogService.StopPoint stopBefore) {}
     public record BinlogCatalog(List<com.prestige.replica.domain.BinlogArchive> files, java.time.Instant coveredFrom, java.time.Instant coveredUntil,
                                 long totalBytes, java.time.Instant gapAt, String gapDetail, Operation lastRun) {}
     public record SwitchoverIn(@NotNull UUID targetNodeId, boolean reattachOldPrimary, @NotBlank String topologyConfirmation) {}
@@ -148,7 +149,7 @@ public class OperationResource {
 
     @POST @Path("/topologies/{id}/pitr") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN})
     public Operation pitr(@PathParam("id") UUID id, @Valid PitrIn in) {
-        return binlogs.requestPitr(topology(id), in.stopAt(), in.extract(), in.reason(), me.username());
+        return binlogs.requestPitr(topology(id), in.stopAt(), in.extract(), in.reason(), in.stopBefore(), me.username());
     }
 
     // ---- Lot 3 : opérations contrôlées ---------------------------------------
@@ -261,12 +262,50 @@ public class OperationResource {
             f.params().put("archive", OperationType.BINLOG_ARCHIVE);
             f.params().put("ok", OperationStatus.SUCCEEDED);
         }
-        return Operation.find(q + " ORDER BY requestedAt DESC", f.params()).page(0, Math.max(1, Math.min(limit, 1000))).list();
+        List<Operation> list = Operation.<Operation>find(q + " ORDER BY requestedAt DESC", f.params()).page(0, Math.max(1, Math.min(limit, 1000))).list();
+        for (Operation o : list) {
+            // Résultats de recherche (données de la pharmacie) : seulement dans le détail, selon les droits.
+            if (o.type == OperationType.BINLOG_SEARCH && o.result != null) {
+                Operation.getEntityManager().detach(o);
+                o.result = null;
+            }
+        }
+        return list;
     }
 
     @GET @Path("/operations/{id}") @Transactional
     public OperationView operation(@PathParam("id") UUID id) {
-        return view(op(id), true);
+        Operation op = op(id);
+        if (op.type == OperationType.BINLOG_SEARCH && op.result != null && !canReadData()) {
+            Operation.getEntityManager().detach(op);
+            op.result = ops.write(maskSearch(ops.read(op.result)));
+        }
+        return view(op, true);
+    }
+
+    /** Valeurs des lignes visibles par les rôles d'exploitation et d'audit ; masquées pour les autres. */
+    boolean canReadData() {
+        return me.hasRole(Roles.SUPER_ADMIN) || me.hasRole(Roles.SITE_ADMIN) || me.hasRole(Roles.OPERATOR) || me.hasRole(Roles.AUDITOR);
+    }
+
+    static com.fasterxml.jackson.databind.JsonNode maskSearch(com.fasterxml.jackson.databind.JsonNode r) {
+        if (!(r instanceof com.fasterxml.jackson.databind.node.ObjectNode o)) return r;
+        o.put("masked", true);
+        for (com.fasterxml.jackson.databind.JsonNode tx : o.path("transactions")) {
+            ((com.fasterxml.jackson.databind.node.ObjectNode) tx).remove("queries");
+            for (com.fasterxml.jackson.databind.JsonNode c : tx.path("changes")) {
+                var co = (com.fasterxml.jackson.databind.node.ObjectNode) c;
+                co.remove("sample");
+                if (co.has("statement")) co.put("statement", "(masqué)");
+            }
+        }
+        return o;
+    }
+
+    @POST @Path("/topologies/{id}/binlog-search") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN})
+    public Operation binlogSearch(@PathParam("id") UUID id, com.prestige.replica.service.BinlogService.SearchRequest in) {
+        if (in == null) throw new BadRequestException("Paramètres manquants");
+        return binlogs.requestSearch(topology(id), in, me.username());
     }
 
     static OperationView view(Operation op, boolean withSteps) {

@@ -149,10 +149,14 @@ const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '
         <dt>Clé</dt><dd class="mono">{{ result.manifest.keyId }}</dd>
       </dl>
     </template>
+    <template v-else-if="op.type === 'BINLOG_SEARCH'">
+      <p v-if="result && !result.purged">{{ result.total }} transaction(s) trouvée(s), {{ result.rows }} ligne(s) ou instruction(s).</p>
+      <p><RouterLink :to="{ path: '/journaux', query: { op: op.id } }">Voir le résultat dans l'explorateur des journaux →</RouterLink></p>
+    </template>
     <template v-else-if="result && op.type === 'PITR_RESTORE'">
       <h3>Restauration à un instant précis</h3>
       <dl class="kv">
-        <dt>Instant visé</dt><dd>{{ date(result.stopAt) }}</dd>
+        <dt>Instant visé</dt><dd>{{ result.stopBefore ? `juste avant la transaction ${result.stopBefore.gtid}` : date(result.stopAt) }}</dd>
         <dt>Point de départ (sauvegarde)</dt><dd class="mono">{{ result.startGtid }}</dd>
         <dt>Dernière transaction rejouée</dt><dd class="mono">{{ result.reachedGtid || '—' }}<span v-if="result.lastTransactionAt"> ({{ date(result.lastTransactionAt) }})</span></dd>
         <dt>Transactions rejouées</dt><dd>{{ result.transactions }} depuis {{ result.binlogFiles }} journal(aux)</dd>

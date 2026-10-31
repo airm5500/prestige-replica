@@ -46,7 +46,7 @@ export interface UserOut { id: string; username: string; role: string; tenantId:
 
 export type OperationType = 'PREFLIGHT' | 'BACKUP_FULL' | 'RESTORE_TEST' | 'BACKUP_PRUNE' | 'PROVISION_REPLICA'
   | 'REPLICATION_PAUSE' | 'REPLICATION_RESUME' | 'SWITCHOVER' | 'SWITCHOVER_DEMOTE' | 'SWITCHOVER_PROMOTE' | 'SWITCHOVER_UNDO' | 'REPLICA_ATTACH' | 'FAILOVER' | 'FENCE' | 'DRILL'
-  | 'BINLOG_ARCHIVE' | 'PITR_RESTORE'
+  | 'BINLOG_ARCHIVE' | 'PITR_RESTORE' | 'BINLOG_SEARCH'
 export type OperationStatus = 'AWAITING_APPROVAL' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'INTERVENTION_REQUIRED' | 'CANCELLED'
 export interface Operation {
   id: string; tenantId: string; siteId: string; topologyId: string | null; nodeId: string; type: OperationType; status: OperationStatus
@@ -207,7 +207,9 @@ export const api = {
     request<Topology>('PUT', `api/v1/topologies/${topologyId}/binlog-policy`, b),
   binlogs: (topologyId: string) => request<BinlogCatalog>('GET', `api/v1/topologies/${topologyId}/binlogs`),
   pitrPlan: (topologyId: string, stopAt: string) => request<PitrPlan>('POST', `api/v1/topologies/${topologyId}/pitr/plan`, { stopAt }),
-  pitr: (topologyId: string, b: { stopAt: string; extract: string[]; reason: string }) =>
+  binlogSearch: (topologyId: string, b: { from: string; to: string; databases: string[]; tables: string[]; types: string[]; text: string; reason: string }) =>
+    request<Operation>('POST', `api/v1/topologies/${topologyId}/binlog-search`, b),
+  pitr: (topologyId: string, b: { stopAt: string; extract: string[]; reason: string; stopBefore?: { relativePath: string; position: number; gtid: string } | null }) =>
     request<Operation>('POST', `api/v1/topologies/${topologyId}/pitr`, b),
   switchoverPlan: (topologyId: string, targetNodeId: string) => request<SwitchoverPlan>('POST', `api/v1/topologies/${topologyId}/switchover/plan`, { targetNodeId }),
   switchover: (topologyId: string, b: { targetNodeId: string; reattachOldPrimary: boolean; topologyConfirmation: string }) =>

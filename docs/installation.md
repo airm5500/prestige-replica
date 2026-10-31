@@ -221,3 +221,5 @@ Les sauvegardes complètes sont quotidiennes. Pour revenir **à la seconde près
    Importer le fichier dans une base de travail, **jamais directement dans la production**, puis recopier les seules lignes à récupérer.
 
 Les journaux archivés antérieurs à la plus ancienne sauvegarde conservée sont supprimés automatiquement.
+
+La page **Journaux** cherche dans cette archive (qui a supprimé ou modifié quoi, et quand) avec le même agent : rien de plus à installer. Garder `binlog_annotate_row_events=ON` (valeur par défaut) sur le primaire pour voir la requête d'origine de chaque changement.

@@ -1,0 +1,2037 @@
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#261031 21:13:34 server id 2  end_log_pos 256 CRC32 0xd311baab 	Start: binlog v 4, server v 10.11.14-MariaDB-0ubuntu0.24.04.1-log created 261031 21:13:34 at startup
+ROLLBACK/*!*/;
+# at 256
+#261031 21:13:34 server id 2  end_log_pos 315 CRC32 0xbd5f258d 	Gtid list [0-1-1136,
+# 0-2-1243]
+# at 315
+#261031 21:13:34 server id 2  end_log_pos 355 CRC32 0x6a29c178 	Binlog checkpoint binlog.000003
+# at 355
+#261031 21:13:46 server id 2  end_log_pos 397 CRC32 0x80ac2d5d 	GTID 0-2-1244 ddl
+/*M!100101 SET @@session.skip_parallel_replication=0*//*!*/;
+/*M!100001 SET @@session.gtid_domain_id=0*//*!*/;
+/*M!100001 SET @@session.server_id=2*//*!*/;
+/*M!100001 SET @@session.gtid_seq_no=1244*//*!*/;
+# at 397
+#261031 21:13:46 server id 2  end_log_pos 529 CRC32 0x967d96c0 	Query	thread_id=9	exec_time=0	error_code=0	xid=0
+SET TIMESTAMP=1793481226/*!*/;
+SET @@session.pseudo_thread_id=9/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1, @@session.check_constraint_checks=1, @@session.sql_if_exists=0, @@session.explicit_defaults_for_timestamp=1, @@session.system_versioning_insert_history=0/*!*/;
+SET @@session.sql_mode=1411383296/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C latin1 *//*!*/;
+SET @@session.character_set_client=latin1,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+GRANT BINLOG MONITOR ON *.* TO 'prm_repl'@'127.0.0.1'
+/*!*/;
+# at 529
+#261031 21:23:14 server id 2  end_log_pos 571 CRC32 0x996373ab 	GTID 0-2-1245 ddl
+/*M!100001 SET @@session.gtid_seq_no=1245*//*!*/;
+# at 571
+#261031 21:23:14 server id 2  end_log_pos 749 CRC32 0x4a68c4b7 	Query	thread_id=24	exec_time=0	error_code=0	xid=188
+use `prestige_demo`/*!*/;
+SET TIMESTAMP=1793481794/*!*/;
+CREATE TABLE IF NOT EXISTS clients (id INT PRIMARY KEY, nom VARCHAR(40), solde DECIMAL(10,2))
+/*!*/;
+# at 749
+#261031 21:23:14 server id 2  end_log_pos 791 CRC32 0x410d118e 	GTID 0-2-1246 trans
+/*M!100001 SET @@session.gtid_seq_no=1246*//*!*/;
+START TRANSACTION
+/*!*/;
+# at 791
+# at 895
+#261031 21:23:14 server id 2  end_log_pos 895 CRC32 0x945b24d7 	Annotate_rows:
+#Q> INSERT INTO clients SELECT seq, CONCAT('Client ', seq), seq*1.5 FROM seq_1_to_200
+#261031 21:23:14 server id 2  end_log_pos 960 CRC32 0x3789731b 	Table_map: `prestige_demo`.`clients` mapped to number 23
+# at 960
+#261031 21:23:14 server id 2  end_log_pos 5085 CRC32 0xa28ff8c9 	Write_rows: table id 23 flags: STMT_END_F
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=1
+###   @2='Client 1'
+###   @3=1.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=2
+###   @2='Client 2'
+###   @3=3.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=3
+###   @2='Client 3'
+###   @3=4.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=4
+###   @2='Client 4'
+###   @3=6.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=5
+###   @2='Client 5'
+###   @3=7.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=6
+###   @2='Client 6'
+###   @3=9.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=7
+###   @2='Client 7'
+###   @3=10.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=8
+###   @2='Client 8'
+###   @3=12.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=9
+###   @2='Client 9'
+###   @3=13.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=10
+###   @2='Client 10'
+###   @3=15.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=11
+###   @2='Client 11'
+###   @3=16.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=12
+###   @2='Client 12'
+###   @3=18.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=13
+###   @2='Client 13'
+###   @3=19.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=14
+###   @2='Client 14'
+###   @3=21.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=15
+###   @2='Client 15'
+###   @3=22.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=16
+###   @2='Client 16'
+###   @3=24.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=17
+###   @2='Client 17'
+###   @3=25.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=18
+###   @2='Client 18'
+###   @3=27.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=19
+###   @2='Client 19'
+###   @3=28.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=20
+###   @2='Client 20'
+###   @3=30.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=21
+###   @2='Client 21'
+###   @3=31.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=22
+###   @2='Client 22'
+###   @3=33.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=23
+###   @2='Client 23'
+###   @3=34.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=24
+###   @2='Client 24'
+###   @3=36.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=25
+###   @2='Client 25'
+###   @3=37.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=26
+###   @2='Client 26'
+###   @3=39.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=27
+###   @2='Client 27'
+###   @3=40.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=28
+###   @2='Client 28'
+###   @3=42.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=29
+###   @2='Client 29'
+###   @3=43.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=30
+###   @2='Client 30'
+###   @3=45.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=31
+###   @2='Client 31'
+###   @3=46.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=32
+###   @2='Client 32'
+###   @3=48.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=33
+###   @2='Client 33'
+###   @3=49.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=34
+###   @2='Client 34'
+###   @3=51.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=35
+###   @2='Client 35'
+###   @3=52.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=36
+###   @2='Client 36'
+###   @3=54.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=37
+###   @2='Client 37'
+###   @3=55.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=38
+###   @2='Client 38'
+###   @3=57.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=39
+###   @2='Client 39'
+###   @3=58.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=40
+###   @2='Client 40'
+###   @3=60.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=41
+###   @2='Client 41'
+###   @3=61.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=42
+###   @2='Client 42'
+###   @3=63.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=43
+###   @2='Client 43'
+###   @3=64.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=44
+###   @2='Client 44'
+###   @3=66.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=45
+###   @2='Client 45'
+###   @3=67.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=46
+###   @2='Client 46'
+###   @3=69.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=47
+###   @2='Client 47'
+###   @3=70.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=48
+###   @2='Client 48'
+###   @3=72.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=49
+###   @2='Client 49'
+###   @3=73.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=50
+###   @2='Client 50'
+###   @3=75.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=51
+###   @2='Client 51'
+###   @3=76.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=52
+###   @2='Client 52'
+###   @3=78.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=53
+###   @2='Client 53'
+###   @3=79.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=54
+###   @2='Client 54'
+###   @3=81.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=55
+###   @2='Client 55'
+###   @3=82.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=56
+###   @2='Client 56'
+###   @3=84.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=57
+###   @2='Client 57'
+###   @3=85.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=58
+###   @2='Client 58'
+###   @3=87.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=59
+###   @2='Client 59'
+###   @3=88.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=60
+###   @2='Client 60'
+###   @3=90.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=61
+###   @2='Client 61'
+###   @3=91.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=62
+###   @2='Client 62'
+###   @3=93.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=63
+###   @2='Client 63'
+###   @3=94.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=64
+###   @2='Client 64'
+###   @3=96.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=65
+###   @2='Client 65'
+###   @3=97.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=66
+###   @2='Client 66'
+###   @3=99.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=67
+###   @2='Client 67'
+###   @3=100.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=68
+###   @2='Client 68'
+###   @3=102.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=69
+###   @2='Client 69'
+###   @3=103.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=70
+###   @2='Client 70'
+###   @3=105.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=71
+###   @2='Client 71'
+###   @3=106.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=72
+###   @2='Client 72'
+###   @3=108.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=73
+###   @2='Client 73'
+###   @3=109.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=74
+###   @2='Client 74'
+###   @3=111.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=75
+###   @2='Client 75'
+###   @3=112.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=76
+###   @2='Client 76'
+###   @3=114.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=77
+###   @2='Client 77'
+###   @3=115.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=78
+###   @2='Client 78'
+###   @3=117.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=79
+###   @2='Client 79'
+###   @3=118.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=80
+###   @2='Client 80'
+###   @3=120.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=81
+###   @2='Client 81'
+###   @3=121.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=82
+###   @2='Client 82'
+###   @3=123.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=83
+###   @2='Client 83'
+###   @3=124.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=84
+###   @2='Client 84'
+###   @3=126.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=85
+###   @2='Client 85'
+###   @3=127.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=86
+###   @2='Client 86'
+###   @3=129.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=87
+###   @2='Client 87'
+###   @3=130.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=88
+###   @2='Client 88'
+###   @3=132.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=89
+###   @2='Client 89'
+###   @3=133.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=90
+###   @2='Client 90'
+###   @3=135.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=91
+###   @2='Client 91'
+###   @3=136.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=92
+###   @2='Client 92'
+###   @3=138.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=93
+###   @2='Client 93'
+###   @3=139.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=94
+###   @2='Client 94'
+###   @3=141.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=95
+###   @2='Client 95'
+###   @3=142.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=96
+###   @2='Client 96'
+###   @3=144.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=97
+###   @2='Client 97'
+###   @3=145.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=98
+###   @2='Client 98'
+###   @3=147.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=99
+###   @2='Client 99'
+###   @3=148.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=100
+###   @2='Client 100'
+###   @3=150.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=101
+###   @2='Client 101'
+###   @3=151.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=102
+###   @2='Client 102'
+###   @3=153.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=103
+###   @2='Client 103'
+###   @3=154.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=104
+###   @2='Client 104'
+###   @3=156.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=105
+###   @2='Client 105'
+###   @3=157.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=106
+###   @2='Client 106'
+###   @3=159.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=107
+###   @2='Client 107'
+###   @3=160.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=108
+###   @2='Client 108'
+###   @3=162.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=109
+###   @2='Client 109'
+###   @3=163.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=110
+###   @2='Client 110'
+###   @3=165.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=111
+###   @2='Client 111'
+###   @3=166.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=112
+###   @2='Client 112'
+###   @3=168.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=113
+###   @2='Client 113'
+###   @3=169.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=114
+###   @2='Client 114'
+###   @3=171.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=115
+###   @2='Client 115'
+###   @3=172.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=116
+###   @2='Client 116'
+###   @3=174.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=117
+###   @2='Client 117'
+###   @3=175.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=118
+###   @2='Client 118'
+###   @3=177.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=119
+###   @2='Client 119'
+###   @3=178.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=120
+###   @2='Client 120'
+###   @3=180.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=121
+###   @2='Client 121'
+###   @3=181.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=122
+###   @2='Client 122'
+###   @3=183.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=123
+###   @2='Client 123'
+###   @3=184.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=124
+###   @2='Client 124'
+###   @3=186.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=125
+###   @2='Client 125'
+###   @3=187.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=126
+###   @2='Client 126'
+###   @3=189.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=127
+###   @2='Client 127'
+###   @3=190.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=128
+###   @2='Client 128'
+###   @3=192.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=129
+###   @2='Client 129'
+###   @3=193.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=130
+###   @2='Client 130'
+###   @3=195.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=131
+###   @2='Client 131'
+###   @3=196.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=132
+###   @2='Client 132'
+###   @3=198.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=133
+###   @2='Client 133'
+###   @3=199.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=134
+###   @2='Client 134'
+###   @3=201.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=135
+###   @2='Client 135'
+###   @3=202.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=136
+###   @2='Client 136'
+###   @3=204.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=137
+###   @2='Client 137'
+###   @3=205.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=138
+###   @2='Client 138'
+###   @3=207.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=139
+###   @2='Client 139'
+###   @3=208.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=140
+###   @2='Client 140'
+###   @3=210.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=141
+###   @2='Client 141'
+###   @3=211.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=142
+###   @2='Client 142'
+###   @3=213.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=143
+###   @2='Client 143'
+###   @3=214.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=144
+###   @2='Client 144'
+###   @3=216.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=145
+###   @2='Client 145'
+###   @3=217.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=146
+###   @2='Client 146'
+###   @3=219.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=147
+###   @2='Client 147'
+###   @3=220.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=148
+###   @2='Client 148'
+###   @3=222.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=149
+###   @2='Client 149'
+###   @3=223.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=150
+###   @2='Client 150'
+###   @3=225.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=151
+###   @2='Client 151'
+###   @3=226.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=152
+###   @2='Client 152'
+###   @3=228.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=153
+###   @2='Client 153'
+###   @3=229.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=154
+###   @2='Client 154'
+###   @3=231.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=155
+###   @2='Client 155'
+###   @3=232.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=156
+###   @2='Client 156'
+###   @3=234.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=157
+###   @2='Client 157'
+###   @3=235.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=158
+###   @2='Client 158'
+###   @3=237.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=159
+###   @2='Client 159'
+###   @3=238.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=160
+###   @2='Client 160'
+###   @3=240.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=161
+###   @2='Client 161'
+###   @3=241.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=162
+###   @2='Client 162'
+###   @3=243.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=163
+###   @2='Client 163'
+###   @3=244.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=164
+###   @2='Client 164'
+###   @3=246.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=165
+###   @2='Client 165'
+###   @3=247.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=166
+###   @2='Client 166'
+###   @3=249.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=167
+###   @2='Client 167'
+###   @3=250.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=168
+###   @2='Client 168'
+###   @3=252.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=169
+###   @2='Client 169'
+###   @3=253.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=170
+###   @2='Client 170'
+###   @3=255.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=171
+###   @2='Client 171'
+###   @3=256.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=172
+###   @2='Client 172'
+###   @3=258.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=173
+###   @2='Client 173'
+###   @3=259.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=174
+###   @2='Client 174'
+###   @3=261.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=175
+###   @2='Client 175'
+###   @3=262.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=176
+###   @2='Client 176'
+###   @3=264.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=177
+###   @2='Client 177'
+###   @3=265.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=178
+###   @2='Client 178'
+###   @3=267.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=179
+###   @2='Client 179'
+###   @3=268.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=180
+###   @2='Client 180'
+###   @3=270.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=181
+###   @2='Client 181'
+###   @3=271.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=182
+###   @2='Client 182'
+###   @3=273.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=183
+###   @2='Client 183'
+###   @3=274.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=184
+###   @2='Client 184'
+###   @3=276.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=185
+###   @2='Client 185'
+###   @3=277.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=186
+###   @2='Client 186'
+###   @3=279.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=187
+###   @2='Client 187'
+###   @3=280.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=188
+###   @2='Client 188'
+###   @3=282.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=189
+###   @2='Client 189'
+###   @3=283.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=190
+###   @2='Client 190'
+###   @3=285.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=191
+###   @2='Client 191'
+###   @3=286.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=192
+###   @2='Client 192'
+###   @3=288.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=193
+###   @2='Client 193'
+###   @3=289.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=194
+###   @2='Client 194'
+###   @3=291.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=195
+###   @2='Client 195'
+###   @3=292.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=196
+###   @2='Client 196'
+###   @3=294.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=197
+###   @2='Client 197'
+###   @3=295.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=198
+###   @2='Client 198'
+###   @3=297.00
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=199
+###   @2='Client 199'
+###   @3=298.50
+### INSERT INTO `prestige_demo`.`clients`
+### SET
+###   @1=200
+###   @2='Client 200'
+###   @3=300.00
+# Number of rows: 200
+# at 5085
+#261031 21:23:14 server id 2  end_log_pos 5116 CRC32 0x149c40e4 	Xid = 190
+COMMIT/*!*/;
+#261031 21:23:34 server id 2  end_log_pos 85912 CRC32 0xa9cba76c 	GTID 0-2-1560 trans
+/*M!100001 SET @@session.gtid_seq_no=1560*//*!*/;
+START TRANSACTION
+/*!*/;
+# at 85912
+# at 85981
+#261031 21:23:34 server id 2  end_log_pos 85981 CRC32 0x4841905d 	Annotate_rows:
+#Q> UPDATE clients SET solde=solde+10 WHERE id<=50
+#261031 21:23:34 server id 2  end_log_pos 86046 CRC32 0xa80ccedf 	Table_map: `prestige_demo`.`clients` mapped to number 23
+# at 86046
+#261031 21:23:34 server id 2  end_log_pos 88062 CRC32 0x620d5cc2 	Update_rows: table id 23 flags: STMT_END_F
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=1
+###   @2='Client 1'
+###   @3=1.50
+### SET
+###   @1=1
+###   @2='Client 1'
+###   @3=11.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=2
+###   @2='Client 2'
+###   @3=3.00
+### SET
+###   @1=2
+###   @2='Client 2'
+###   @3=13.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=3
+###   @2='Client 3'
+###   @3=4.50
+### SET
+###   @1=3
+###   @2='Client 3'
+###   @3=14.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=4
+###   @2='Client 4'
+###   @3=6.00
+### SET
+###   @1=4
+###   @2='Client 4'
+###   @3=16.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=5
+###   @2='Client 5'
+###   @3=7.50
+### SET
+###   @1=5
+###   @2='Client 5'
+###   @3=17.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=6
+###   @2='Client 6'
+###   @3=9.00
+### SET
+###   @1=6
+###   @2='Client 6'
+###   @3=19.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=7
+###   @2='Client 7'
+###   @3=10.50
+### SET
+###   @1=7
+###   @2='Client 7'
+###   @3=20.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=8
+###   @2='Client 8'
+###   @3=12.00
+### SET
+###   @1=8
+###   @2='Client 8'
+###   @3=22.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=9
+###   @2='Client 9'
+###   @3=13.50
+### SET
+###   @1=9
+###   @2='Client 9'
+###   @3=23.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=10
+###   @2='Client 10'
+###   @3=15.00
+### SET
+###   @1=10
+###   @2='Client 10'
+###   @3=25.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=11
+###   @2='Client 11'
+###   @3=16.50
+### SET
+###   @1=11
+###   @2='Client 11'
+###   @3=26.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=12
+###   @2='Client 12'
+###   @3=18.00
+### SET
+###   @1=12
+###   @2='Client 12'
+###   @3=28.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=13
+###   @2='Client 13'
+###   @3=19.50
+### SET
+###   @1=13
+###   @2='Client 13'
+###   @3=29.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=14
+###   @2='Client 14'
+###   @3=21.00
+### SET
+###   @1=14
+###   @2='Client 14'
+###   @3=31.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=15
+###   @2='Client 15'
+###   @3=22.50
+### SET
+###   @1=15
+###   @2='Client 15'
+###   @3=32.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=16
+###   @2='Client 16'
+###   @3=24.00
+### SET
+###   @1=16
+###   @2='Client 16'
+###   @3=34.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=17
+###   @2='Client 17'
+###   @3=25.50
+### SET
+###   @1=17
+###   @2='Client 17'
+###   @3=35.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=18
+###   @2='Client 18'
+###   @3=27.00
+### SET
+###   @1=18
+###   @2='Client 18'
+###   @3=37.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=19
+###   @2='Client 19'
+###   @3=28.50
+### SET
+###   @1=19
+###   @2='Client 19'
+###   @3=38.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=20
+###   @2='Client 20'
+###   @3=30.00
+### SET
+###   @1=20
+###   @2='Client 20'
+###   @3=40.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=21
+###   @2='Client 21'
+###   @3=31.50
+### SET
+###   @1=21
+###   @2='Client 21'
+###   @3=41.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=22
+###   @2='Client 22'
+###   @3=33.00
+### SET
+###   @1=22
+###   @2='Client 22'
+###   @3=43.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=23
+###   @2='Client 23'
+###   @3=34.50
+### SET
+###   @1=23
+###   @2='Client 23'
+###   @3=44.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=24
+###   @2='Client 24'
+###   @3=36.00
+### SET
+###   @1=24
+###   @2='Client 24'
+###   @3=46.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=25
+###   @2='Client 25'
+###   @3=37.50
+### SET
+###   @1=25
+###   @2='Client 25'
+###   @3=47.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=26
+###   @2='Client 26'
+###   @3=39.00
+### SET
+###   @1=26
+###   @2='Client 26'
+###   @3=49.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=27
+###   @2='Client 27'
+###   @3=40.50
+### SET
+###   @1=27
+###   @2='Client 27'
+###   @3=50.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=28
+###   @2='Client 28'
+###   @3=42.00
+### SET
+###   @1=28
+###   @2='Client 28'
+###   @3=52.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=29
+###   @2='Client 29'
+###   @3=43.50
+### SET
+###   @1=29
+###   @2='Client 29'
+###   @3=53.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=30
+###   @2='Client 30'
+###   @3=45.00
+### SET
+###   @1=30
+###   @2='Client 30'
+###   @3=55.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=31
+###   @2='Client 31'
+###   @3=46.50
+### SET
+###   @1=31
+###   @2='Client 31'
+###   @3=56.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=32
+###   @2='Client 32'
+###   @3=48.00
+### SET
+###   @1=32
+###   @2='Client 32'
+###   @3=58.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=33
+###   @2='Client 33'
+###   @3=49.50
+### SET
+###   @1=33
+###   @2='Client 33'
+###   @3=59.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=34
+###   @2='Client 34'
+###   @3=51.00
+### SET
+###   @1=34
+###   @2='Client 34'
+###   @3=61.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=35
+###   @2='Client 35'
+###   @3=52.50
+### SET
+###   @1=35
+###   @2='Client 35'
+###   @3=62.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=36
+###   @2='Client 36'
+###   @3=54.00
+### SET
+###   @1=36
+###   @2='Client 36'
+###   @3=64.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=37
+###   @2='Client 37'
+###   @3=55.50
+### SET
+###   @1=37
+###   @2='Client 37'
+###   @3=65.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=38
+###   @2='Client 38'
+###   @3=57.00
+### SET
+###   @1=38
+###   @2='Client 38'
+###   @3=67.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=39
+###   @2='Client 39'
+###   @3=58.50
+### SET
+###   @1=39
+###   @2='Client 39'
+###   @3=68.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=40
+###   @2='Client 40'
+###   @3=60.00
+### SET
+###   @1=40
+###   @2='Client 40'
+###   @3=70.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=41
+###   @2='Client 41'
+###   @3=61.50
+### SET
+###   @1=41
+###   @2='Client 41'
+###   @3=71.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=42
+###   @2='Client 42'
+###   @3=63.00
+### SET
+###   @1=42
+###   @2='Client 42'
+###   @3=73.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=43
+###   @2='Client 43'
+###   @3=64.50
+### SET
+###   @1=43
+###   @2='Client 43'
+###   @3=74.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=44
+###   @2='Client 44'
+###   @3=66.00
+### SET
+###   @1=44
+###   @2='Client 44'
+###   @3=76.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=45
+###   @2='Client 45'
+###   @3=67.50
+### SET
+###   @1=45
+###   @2='Client 45'
+###   @3=77.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=46
+###   @2='Client 46'
+###   @3=69.00
+### SET
+###   @1=46
+###   @2='Client 46'
+###   @3=79.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=47
+###   @2='Client 47'
+###   @3=70.50
+### SET
+###   @1=47
+###   @2='Client 47'
+###   @3=80.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=48
+###   @2='Client 48'
+###   @3=72.00
+### SET
+###   @1=48
+###   @2='Client 48'
+###   @3=82.00
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=49
+###   @2='Client 49'
+###   @3=73.50
+### SET
+###   @1=49
+###   @2='Client 49'
+###   @3=83.50
+### UPDATE `prestige_demo`.`clients`
+### WHERE
+###   @1=50
+###   @2='Client 50'
+###   @3=75.00
+### SET
+###   @1=50
+###   @2='Client 50'
+###   @3=85.00
+# Number of rows: 50
+# at 88062
+#261031 21:23:34 server id 2  end_log_pos 88093 CRC32 0x48862434 	Xid = 906
+COMMIT/*!*/;
+# at 116731
+#261031 21:23:41 server id 2  end_log_pos 116773 CRC32 0x919e6d99 	GTID 0-2-1672 trans
+/*M!100001 SET @@session.gtid_seq_no=1672*//*!*/;
+START TRANSACTION
+/*!*/;
+# at 116773
+# at 116830
+#261031 21:23:41 server id 2  end_log_pos 116830 CRC32 0x36e93c19 	Annotate_rows:
+#Q> DELETE FROM clients WHERE id > 100
+#261031 21:23:41 server id 2  end_log_pos 116895 CRC32 0x9c3526fc 	Table_map: `prestige_demo`.`clients` mapped to number 23
+# at 116895
+#261031 21:23:41 server id 2  end_log_pos 119028 CRC32 0x5b43ae22 	Delete_rows: table id 23 flags: STMT_END_F
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=101
+###   @2='Client 101'
+###   @3=151.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=102
+###   @2='Client 102'
+###   @3=153.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=103
+###   @2='Client 103'
+###   @3=154.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=104
+###   @2='Client 104'
+###   @3=156.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=105
+###   @2='Client 105'
+###   @3=157.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=106
+###   @2='Client 106'
+###   @3=159.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=107
+###   @2='Client 107'
+###   @3=160.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=108
+###   @2='Client 108'
+###   @3=162.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=109
+###   @2='Client 109'
+###   @3=163.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=110
+###   @2='Client 110'
+###   @3=165.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=111
+###   @2='Client 111'
+###   @3=166.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=112
+###   @2='Client 112'
+###   @3=168.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=113
+###   @2='Client 113'
+###   @3=169.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=114
+###   @2='Client 114'
+###   @3=171.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=115
+###   @2='Client 115'
+###   @3=172.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=116
+###   @2='Client 116'
+###   @3=174.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=117
+###   @2='Client 117'
+###   @3=175.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=118
+###   @2='Client 118'
+###   @3=177.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=119
+###   @2='Client 119'
+###   @3=178.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=120
+###   @2='Client 120'
+###   @3=180.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=121
+###   @2='Client 121'
+###   @3=181.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=122
+###   @2='Client 122'
+###   @3=183.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=123
+###   @2='Client 123'
+###   @3=184.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=124
+###   @2='Client 124'
+###   @3=186.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=125
+###   @2='Client 125'
+###   @3=187.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=126
+###   @2='Client 126'
+###   @3=189.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=127
+###   @2='Client 127'
+###   @3=190.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=128
+###   @2='Client 128'
+###   @3=192.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=129
+###   @2='Client 129'
+###   @3=193.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=130
+###   @2='Client 130'
+###   @3=195.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=131
+###   @2='Client 131'
+###   @3=196.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=132
+###   @2='Client 132'
+###   @3=198.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=133
+###   @2='Client 133'
+###   @3=199.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=134
+###   @2='Client 134'
+###   @3=201.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=135
+###   @2='Client 135'
+###   @3=202.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=136
+###   @2='Client 136'
+###   @3=204.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=137
+###   @2='Client 137'
+###   @3=205.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=138
+###   @2='Client 138'
+###   @3=207.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=139
+###   @2='Client 139'
+###   @3=208.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=140
+###   @2='Client 140'
+###   @3=210.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=141
+###   @2='Client 141'
+###   @3=211.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=142
+###   @2='Client 142'
+###   @3=213.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=143
+###   @2='Client 143'
+###   @3=214.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=144
+###   @2='Client 144'
+###   @3=216.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=145
+###   @2='Client 145'
+###   @3=217.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=146
+###   @2='Client 146'
+###   @3=219.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=147
+###   @2='Client 147'
+###   @3=220.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=148
+###   @2='Client 148'
+###   @3=222.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=149
+###   @2='Client 149'
+###   @3=223.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=150
+###   @2='Client 150'
+###   @3=225.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=151
+###   @2='Client 151'
+###   @3=226.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=152
+###   @2='Client 152'
+###   @3=228.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=153
+###   @2='Client 153'
+###   @3=229.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=154
+###   @2='Client 154'
+###   @3=231.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=155
+###   @2='Client 155'
+###   @3=232.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=156
+###   @2='Client 156'
+###   @3=234.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=157
+###   @2='Client 157'
+###   @3=235.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=158
+###   @2='Client 158'
+###   @3=237.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=159
+###   @2='Client 159'
+###   @3=238.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=160
+###   @2='Client 160'
+###   @3=240.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=161
+###   @2='Client 161'
+###   @3=241.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=162
+###   @2='Client 162'
+###   @3=243.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=163
+###   @2='Client 163'
+###   @3=244.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=164
+###   @2='Client 164'
+###   @3=246.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=165
+###   @2='Client 165'
+###   @3=247.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=166
+###   @2='Client 166'
+###   @3=249.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=167
+###   @2='Client 167'
+###   @3=250.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=168
+###   @2='Client 168'
+###   @3=252.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=169
+###   @2='Client 169'
+###   @3=253.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=170
+###   @2='Client 170'
+###   @3=255.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=171
+###   @2='Client 171'
+###   @3=256.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=172
+###   @2='Client 172'
+###   @3=258.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=173
+###   @2='Client 173'
+###   @3=259.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=174
+###   @2='Client 174'
+###   @3=261.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=175
+###   @2='Client 175'
+###   @3=262.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=176
+###   @2='Client 176'
+###   @3=264.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=177
+###   @2='Client 177'
+###   @3=265.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=178
+###   @2='Client 178'
+###   @3=267.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=179
+###   @2='Client 179'
+###   @3=268.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=180
+###   @2='Client 180'
+###   @3=270.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=181
+###   @2='Client 181'
+###   @3=271.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=182
+###   @2='Client 182'
+###   @3=273.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=183
+###   @2='Client 183'
+###   @3=274.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=184
+###   @2='Client 184'
+###   @3=276.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=185
+###   @2='Client 185'
+###   @3=277.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=186
+###   @2='Client 186'
+###   @3=279.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=187
+###   @2='Client 187'
+###   @3=280.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=188
+###   @2='Client 188'
+###   @3=282.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=189
+###   @2='Client 189'
+###   @3=283.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=190
+###   @2='Client 190'
+###   @3=285.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=191
+###   @2='Client 191'
+###   @3=286.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=192
+###   @2='Client 192'
+###   @3=288.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=193
+###   @2='Client 193'
+###   @3=289.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=194
+###   @2='Client 194'
+###   @3=291.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=195
+###   @2='Client 195'
+###   @3=292.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=196
+###   @2='Client 196'
+###   @3=294.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=197
+###   @2='Client 197'
+###   @3=295.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=198
+###   @2='Client 198'
+###   @3=297.00
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=199
+###   @2='Client 199'
+###   @3=298.50
+### DELETE FROM `prestige_demo`.`clients`
+### WHERE
+###   @1=200
+###   @2='Client 200'
+###   @3=300.00
+# Number of rows: 100
+# at 119028
+#261031 21:23:41 server id 2  end_log_pos 119059 CRC32 0x47fc8ec3 	Xid = 1158
+COMMIT/*!*/;

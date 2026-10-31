@@ -216,7 +216,17 @@ public class BinlogService {
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
+    /** Transaction repérée dans l'explorateur : arrêt exact juste avant elle. */
+    public record StopPoint(String relativePath, long position, String gtid) {}
+
+    static final Pattern GTID = Pattern.compile("^\\d{1,10}-\\d{1,10}-\\d{1,20}$");
+
     public Operation requestPitr(Topology t, Instant stopAt, List<String> extract, String reason, String actor) {
+        return requestPitr(t, stopAt, extract, reason, null, actor);
+    }
+
+    @Transactional(Transactional.TxType.MANDATORY)
+    public Operation requestPitr(Topology t, Instant stopAt, List<String> extract, String reason, StopPoint stopBefore, String actor) {
         if (reason == null || reason.isBlank()) throw new BadRequestException("Motif obligatoire (ex. ligne supprimée par erreur)");
         List<String> tables = extract == null ? List.of() : extract.stream().map(String::trim).filter(s -> !s.isEmpty()).distinct().toList();
         for (String s : tables) if (!TABLE.matcher(s).matches()) throw new BadRequestException("Table invalide : « " + s + " » (forme base.table)");
@@ -227,7 +237,20 @@ public class BinlogService {
         Backup b = Backup.findById(p.backupId());
         DatabaseNode exec = DatabaseNode.findById(p.executorId());
         Map<String, Object> backup = Map.of("backupId", b.id.toString(), "relativeDir", b.relativeDir, "sha256", b.sha256);
-        List<Map<String, Object>> files = p.binlogs().stream().map(r -> Map.<String, Object>of("relativePath", r.relativePath(), "sha256", r.sha256() == null ? "" : r.sha256())).toList();
+        List<BinlogRef> chain = p.binlogs();
+        if (stopBefore != null) {
+            if (stopBefore.gtid() == null || !GTID.matcher(stopBefore.gtid()).matches() || stopBefore.position() <= 4) {
+                throw new BadRequestException("Point d'arrêt invalide");
+            }
+            int i = -1;
+            for (int k = 0; k < chain.size(); k++) if (chain.get(k).relativePath().equals(stopBefore.relativePath())) i = k;
+            if (i < 0) throw new BadRequestException("Le journal de cette transaction ne fait pas partie de l'archive à rejouer");
+            if (seq(stopBefore.gtid()) <= seq(b.gtid)) {
+                throw new BadRequestException("La sauvegarde de départ contient déjà cette transaction : restauration « juste avant » impossible");
+            }
+            chain = chain.subList(0, i + 1);
+        }
+        List<Map<String, Object>> files = chain.stream().map(r -> Map.<String, Object>of("relativePath", r.relativePath(), "sha256", r.sha256() == null ? "" : r.sha256())).toList();
         UUID rid = UUID.randomUUID();
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("backup", backup);
@@ -236,8 +259,59 @@ public class BinlogService {
         params.put("stopAt", stopAt.toString());
         params.put("extract", tables);
         params.put("extractDir", "tenants/" + t.tenantId + "/sites/" + t.siteId + "/recoveries/" + rid);
-        Operation op = ops.request(OperationType.PITR_RESTORE, exec, params, "Restauration isolée de " + t.name + " au "
-                + stopAt.toString().substring(0, 19).replace('T', ' ') + " UTC — " + reason.trim(), actor);
+        if (stopBefore != null) {
+            params.put("stopBefore", Map.of("relativePath", stopBefore.relativePath(), "position", stopBefore.position(), "gtid", stopBefore.gtid()));
+        }
+        String target = stopBefore != null ? "juste avant la transaction " + stopBefore.gtid() + " (" + stopAt.toString().substring(0, 19).replace('T', ' ') + " UTC)"
+                : "au " + stopAt.toString().substring(0, 19).replace('T', ' ') + " UTC";
+        Operation op = ops.request(OperationType.PITR_RESTORE, exec, params, "Restauration isolée de " + t.name + " " + target + " — " + reason.trim(), actor);
         return op;
+    }
+
+    // ---- Recherche dans les journaux (vue d'audit) -----------------------------
+
+    static final Pattern DB = Pattern.compile("^[A-Za-z0-9_$]{1,64}$");
+    static final Set<String> TYPES = Set.of("INSERT", "UPDATE", "DELETE", "DDL");
+
+    public record SearchRequest(Instant from, Instant to, List<String> databases, List<String> tables, List<String> types, String text, String reason) {}
+
+    private static List<String> clean(List<String> in) {
+        return in == null ? List.of() : in.stream().map(String::trim).filter(s -> !s.isEmpty()).distinct().toList();
+    }
+
+    @Transactional(Transactional.TxType.MANDATORY)
+    public Operation requestSearch(Topology t, SearchRequest in, String actor) {
+        if (in.reason() == null || in.reason().isBlank()) throw new BadRequestException("Motif obligatoire : les journaux contiennent des données de la pharmacie");
+        if (in.from() == null || in.to() == null || !in.to().isAfter(in.from())) throw new BadRequestException("Période invalide");
+        if (Duration.between(in.from(), in.to()).toDays() > 31) throw new BadRequestException("Période limitée à 31 jours");
+        List<String> dbs = clean(in.databases()), tables = clean(in.tables()), types = clean(in.types());
+        for (String d : dbs) if (!DB.matcher(d).matches()) throw new BadRequestException("Base invalide : « " + d + " »");
+        for (String s : tables) if (!TABLE.matcher(s).matches()) throw new BadRequestException("Table invalide : « " + s + " » (forme base.table)");
+        for (String s : types) if (!TYPES.contains(s)) throw new BadRequestException("Type inconnu : " + s);
+        String text = in.text() == null ? "" : in.text().trim();
+        if (text.length() > 200) throw new BadRequestException("Texte recherché trop long");
+        DatabaseNode node = archiveNode(t);
+        AgentReport r = node == null ? null : monitoring.parse(node.lastReport);
+        if (r == null || !r.capabilitiesOrEmpty().contains("binlogArchive")) {
+            throw new BadRequestException("Aucun serveur d'archivage des journaux disponible (binlogArchive)");
+        }
+        List<BinlogArchive> files = BinlogArchive.<BinlogArchive>list(
+                "topologyId = ?1 and (firstEventAt is null or firstEventAt <= ?2) and (lastEventAt is null or lastEventAt >= ?3)",
+                t.id, in.to(), in.from());
+        files.sort(Comparator.comparing((BinlogArchive a) -> a.firstEventAt, Comparator.nullsFirst(Comparator.naturalOrder())).thenComparing(a -> a.fileName));
+        if (files.isEmpty()) throw new BadRequestException("Aucun journal archivé ne couvre cette période");
+        if (files.size() > 500) throw new BadRequestException("Trop de journaux pour une seule recherche : réduisez la période");
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("binlogs", files.stream().map(f -> Map.<String, Object>of("relativePath", f.relativePath, "sha256", f.sha256 == null ? "" : f.sha256)).toList());
+        p.put("from", in.from().toString());
+        p.put("to", in.to().toString());
+        p.put("databases", dbs);
+        p.put("tables", tables);
+        p.put("types", types);
+        p.put("text", text);
+        p.put("resultDir", "tenants/" + t.tenantId + "/sites/" + t.siteId + "/searches/" + UUID.randomUUID());
+        String what = (types.isEmpty() ? "toutes opérations" : String.join("/", types)) + (tables.isEmpty() ? dbs.isEmpty() ? "" : " sur " + String.join(", ", dbs) : " sur " + String.join(", ", tables))
+                + (text.isEmpty() ? "" : " contenant « " + text + " »");
+        return ops.request(OperationType.BINLOG_SEARCH, node, p, "Recherche dans les journaux de " + t.name + " : " + what + " — " + in.reason().trim(), actor);
     }
 }
