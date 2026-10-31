@@ -1,0 +1,34 @@
+# Agent local — service systemd. Identité distincte de celle du Control Plane.
+# Fichiers : /etc/prestige-replica-manager/agent.json, agent.token (0600), mariadb.password (0600)
+[Unit]
+Description=Prestige Replica Manager - Agent MariaDB (lecture seule)
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prm-agent
+Group=prm-agent
+ExecStart=/usr/local/bin/prm-agent run -config /etc/prestige-replica-manager/agent.json
+Restart=on-failure
+RestartSec=10s
+StartLimitIntervalSec=15min
+StartLimitBurst=10
+TimeoutStopSec=20s
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+# L'agent n'écoute sur aucun port : seules les connexions sortantes et le socket MariaDB sont utiles.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

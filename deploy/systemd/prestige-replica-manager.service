@@ -1,0 +1,44 @@
+# Control Plane — service systemd (§11 « Service Linux »).
+# Installation : /opt/prestige-replica-manager, utilisateur système « prm ».
+# Secrets : /etc/prestige-replica-manager/control-plane.env (mode 0600, propriétaire prm).
+[Unit]
+Description=Prestige Replica Manager - Control Plane
+Documentation=file:///opt/prestige-replica-manager/docs/
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prm
+Group=prm
+EnvironmentFile=/etc/prestige-replica-manager/control-plane.env
+WorkingDirectory=/opt/prestige-replica-manager
+# Runtime Java privé produit par jlink : aucun Java système requis.
+ExecStart=/opt/prestige-replica-manager/runtime/bin/java -XX:+ExitOnOutOfMemoryError -jar /opt/prestige-replica-manager/app/quarkus-run.jar
+Restart=on-failure
+RestartSec=5s
+RestartSteps=5
+RestartMaxDelaySec=2min
+StartLimitIntervalSec=15min
+StartLimitBurst=10
+TimeoutStopSec=60s
+KillSignal=SIGTERM
+
+# Durcissement
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/var/lib/prestige-replica-manager /var/log/prestige-replica-manager
+CapabilityBoundingSet=
+MemoryMax=2G
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
