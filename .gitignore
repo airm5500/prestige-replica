@@ -1,0 +1,12 @@
+# Construction
+/dist/
+control-plane/target/
+control-plane/src/main/resources/META-INF/resources/
+web/node_modules/
+web/dist/
+# Secrets locaux
+*.token
+.env
+*.key
+*.pem
+!deploy/**/README*
