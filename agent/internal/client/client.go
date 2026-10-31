@@ -88,3 +88,68 @@ func (c *Client) Send(ctx context.Context, batch []report.Report) error {
 	}
 	return nil
 }
+
+// Job est une opération en attente pour ce nœud.
+type Job struct {
+	ID     string          `json:"id"`
+	Type   string          `json:"type"`
+	Params json.RawMessage `json:"params"`
+}
+
+// PollJobs récupère les opérations en attente (au plus une à la fois).
+func (c *Client) PollJobs(ctx context.Context) ([]Job, error) {
+	var jobs []Job
+	err := c.do(ctx, http.MethodGet, "/api/v1/agent/jobs", nil, &jobs)
+	return jobs, err
+}
+
+// JobEvent publie une étape ou un avertissement.
+func (c *Client) JobEvent(ctx context.Context, id, level, message string) error {
+	return c.do(ctx, http.MethodPost, "/api/v1/agent/jobs/"+id+"/events", map[string]string{"level": level, "message": message}, nil)
+}
+
+// StartJob réclame l'opération ; renvoie une erreur si elle n'est plus disponible.
+func (c *Client) StartJob(ctx context.Context, id string) error {
+	return c.do(ctx, http.MethodPost, "/api/v1/agent/jobs/"+id+"/start", map[string]string{}, nil)
+}
+
+// FinishJob publie le résultat final : SUCCEEDED, FAILED ou INTERVENTION_REQUIRED.
+func (c *Client) FinishJob(ctx context.Context, id, status, errMsg string, result map[string]any) error {
+	return c.do(ctx, http.MethodPost, "/api/v1/agent/jobs/"+id+"/finish",
+		map[string]any{"status": status, "error": errMsg, "result": result}, nil)
+}
+
+func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
+	var body io.Reader
+	if in != nil {
+		b, err := json.Marshal(in)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	if err != nil {
+		return err
+	}
+	if in != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("%w (HTTP %d)", ErrUnauthorized, resp.StatusCode)
+	}
+	if resp.StatusCode >= 300 {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return fmt.Errorf("Control Plane HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
+	}
+	if out != nil && resp.StatusCode != http.StatusNoContent {
+		return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out)
+	}
+	return nil
+}

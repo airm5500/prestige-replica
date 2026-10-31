@@ -31,6 +31,65 @@ type Config struct {
 	BufferSize int `json:"bufferSize"`
 	// ExtraDiskPaths : points de montage supplémentaires (binlogs, sauvegardes).
 	ExtraDiskPaths []string `json:"extraDiskPaths"`
+
+	// Lot 2 : opérations. Chaque capacité est désactivée tant qu'elle n'est pas
+	// configurée localement : la console ne peut rien activer à distance.
+	Tools        ToolsConfig        `json:"tools"`
+	Backup       BackupConfig       `json:"backup"`
+	RestoreTest  RestoreTestConfig  `json:"restoreTest"`
+	Provisioning ProvisioningConfig `json:"provisioning"`
+}
+
+// ToolsConfig indique où trouver les binaires MariaDB officiels.
+type ToolsConfig struct {
+	// BinDir : dossier contenant mariadb-backup, mbstream et mariadbd. Vide =
+	// recherche dans le PATH puis dans « C:\Program Files\MariaDB *\bin ».
+	BinDir string `json:"binDir"`
+}
+
+// BackupConfig active les sauvegardes physiques sur ce nœud.
+type BackupConfig struct {
+	Enabled bool `json:"enabled"`
+	// Root : racine du stockage (dossier local, partage SMB \\serveur\prm ou montage).
+	Root string `json:"root"`
+	// Compte MariaDB dédié aux sauvegardes (RELOAD, PROCESS, LOCK TABLES, BINLOG MONITOR).
+	User              string `json:"user"`
+	PasswordFile      string `json:"passwordFile"`
+	EncryptionKeyFile string `json:"encryptionKeyFile"`
+	// Parallel : threads de copie de mariadb-backup (défaut 2).
+	Parallel int `json:"parallel"`
+}
+
+// RestoreTestConfig active les restaurations de contrôle dans une instance isolée.
+type RestoreTestConfig struct {
+	Enabled bool `json:"enabled"`
+	// ScratchDir : dossier de travail, sur un disque disposant de 2,5 fois la taille de la base.
+	ScratchDir string `json:"scratchDir"`
+	// BufferPoolMB : mémoire allouée à l'instance temporaire (défaut 512).
+	BufferPoolMB int `json:"bufferPoolMb"`
+	// RunAsUser : sous Linux, utilisateur système de l'instance temporaire (défaut « mysql »).
+	RunAsUser string `json:"runAsUser"`
+}
+
+// ProvisioningConfig autorise la reconstruction de CE serveur comme réplique.
+// Opération destructive : n'activer que sur une réplique, jamais sur le primaire.
+type ProvisioningConfig struct {
+	Enabled bool `json:"enabled"`
+	// DataDir : datadir de l'instance MariaDB locale.
+	DataDir string `json:"dataDir"`
+	// ServiceName : nom du service (Windows « MariaDB », Linux « mariadb »).
+	ServiceName string `json:"serviceName"`
+	// StopCommand / StartCommand : commandes explicites (sinon dérivées du service).
+	StopCommand  []string `json:"stopCommand"`
+	StartCommand []string `json:"startCommand"`
+	// FileOwner : sous Linux, propriétaire des fichiers restaurés (défaut « mysql »).
+	FileOwner string `json:"fileOwner"`
+	// Compte administrateur local pour CHANGE MASTER / START SLAVE.
+	AdminUser         string `json:"adminUser"`
+	AdminPasswordFile string `json:"adminPasswordFile"`
+	// Compte de réplication créé sur le primaire (REPLICATION SLAVE uniquement).
+	ReplicationUser         string `json:"replicationUser"`
+	ReplicationPasswordFile string `json:"replicationPasswordFile"`
 }
 
 // TLSConfig décrit l'identité mTLS de l'agent.
@@ -85,6 +144,18 @@ func (c *Config) applyDefaults() {
 	if c.MariaDB.TimeoutSeconds <= 0 {
 		c.MariaDB.TimeoutSeconds = 5
 	}
+	if c.Backup.Parallel <= 0 {
+		c.Backup.Parallel = 2
+	}
+	if c.RestoreTest.BufferPoolMB <= 0 {
+		c.RestoreTest.BufferPoolMB = 512
+	}
+	if c.Provisioning.FileOwner == "" {
+		c.Provisioning.FileOwner = "mysql"
+	}
+	if c.RestoreTest.RunAsUser == "" {
+		c.RestoreTest.RunAsUser = "mysql"
+	}
 }
 
 // Validate refuse les combinaisons dangereuses.
@@ -103,7 +174,29 @@ func (c *Config) Validate() error {
 			return errors.New("tls.certFile et tls.keyFile doivent être fournis ensemble")
 		}
 	}
+	if c.Backup.Enabled && (c.Backup.Root == "" || c.Backup.User == "" || c.Backup.EncryptionKeyFile == "") {
+		return errors.New("backup : root, user et encryptionKeyFile sont obligatoires")
+	}
+	if c.RestoreTest.Enabled && (c.RestoreTest.ScratchDir == "" || c.Backup.Root == "" || c.Backup.EncryptionKeyFile == "") {
+		return errors.New("restoreTest : scratchDir, backup.root et backup.encryptionKeyFile sont obligatoires")
+	}
+	if c.Provisioning.Enabled && (c.Provisioning.DataDir == "" || c.Provisioning.AdminUser == "" || c.Provisioning.ReplicationUser == "" ||
+		c.Backup.Root == "" || c.Backup.EncryptionKeyFile == "") {
+		return errors.New("provisioning : dataDir, adminUser, replicationUser, backup.root et backup.encryptionKeyFile sont obligatoires")
+	}
 	return nil
+}
+
+// ReadSecret lit un secret d'une ligne depuis un fichier protégé.
+func ReadSecret(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("lecture du secret: %w", err)
+	}
+	return strings.TrimRight(string(b), "\r\n"), nil
 }
 
 func isLoopbackHTTP(u string) bool {

@@ -30,6 +30,7 @@ public class MonitoringService {
 
     @Inject ObjectMapper json;
     @Inject IncidentService incidents;
+    @Inject jakarta.enterprise.inject.Instance<BackupService> backups;
 
     @Transactional
     public int ingest(UUID nodeId, List<AgentReport> reports) {
@@ -92,7 +93,11 @@ public class MonitoringService {
             AgentReport r = parse(n.lastReport);
             if (r != null && r.server() != null) ids.put(n.name, r.server().serverId());
         }
-        List<Finding> f = topo.maintenance ? List.of() : AlertRules.evaluateTopology(ids);
+        List<Finding> f = new ArrayList<>();
+        if (!topo.maintenance) {
+            f.addAll(AlertRules.evaluateTopology(ids));
+            f.addAll(backups.get().findings(topo, now));
+        }
         incidents.reconcile(IncidentService.Scope.topology(topo.tenantId, topo.siteId, topo.id), f, now);
     }
 

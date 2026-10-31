@@ -20,6 +20,12 @@ public class AuditService {
 
     public record Verification(boolean valid, long checked, Long firstBrokenId) {}
 
+    /** Trace un refus dans sa propre transaction : elle survit à l'annulation de la requête refusée. */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public AuditEvent recordDenied(String actor, String action, String resource, UUID tenantId, UUID siteId, String details) {
+        return record(actor, action, resource, "DENIED", tenantId, siteId, details);
+    }
+
     @Transactional(Transactional.TxType.REQUIRED)
     public AuditEvent record(String actor, String action, String resource, String result, UUID tenantId, UUID siteId, String details) {
         // Sérialise les écritures pour garantir une chaîne linéaire.

@@ -26,6 +26,7 @@ import (
 	"github.com/airm5500/prestige-replica-manager/agent/internal/client"
 	"github.com/airm5500/prestige-replica-manager/agent/internal/collector"
 	"github.com/airm5500/prestige-replica-manager/agent/internal/config"
+	"github.com/airm5500/prestige-replica-manager/agent/internal/ops"
 	"github.com/airm5500/prestige-replica-manager/agent/internal/report"
 )
 
@@ -41,6 +42,12 @@ Utilisation :
   prm-agent status -config agent.json -json
   prm-agent check  -config agent.json   valide la configuration et la connexion MariaDB
   prm-agent version
+
+CLI de secours (fonctionne sans console, avec la configuration locale) :
+  prm-agent keygen  -out backup.key        génère une clé de chiffrement des sauvegardes
+  prm-agent preflight -config agent.json [-role PRIMARY|REPLICA]
+  prm-agent backup  -config agent.json      sauvegarde complète dans backup.root/local/<horodatage>
+  prm-agent restore-test -config agent.json -dir <chemin relatif sous backup.root>
 `, Version)
 }
 
@@ -53,6 +60,9 @@ func main() {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	cfgPath := fs.String("config", defaultConfigPath(), "fichier de configuration JSON")
 	asJSON := fs.Bool("json", false, "sortie JSON (status)")
+	outPath := fs.String("out", "", "fichier de sortie (keygen)")
+	role := fs.String("role", "PRIMARY", "rôle visé (preflight)")
+	relDir := fs.String("dir", "", "dossier relatif d'une sauvegarde (restore-test)")
 	_ = fs.Parse(os.Args[2:])
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -61,7 +71,13 @@ func main() {
 	case "version":
 		fmt.Println(Version)
 		return
-	case "run", "status", "check":
+	case "keygen":
+		if err := keygen(*outPath); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	case "run", "status", "check", "preflight", "backup", "restore-test":
 	default:
 		usage()
 		os.Exit(2)
@@ -116,8 +132,11 @@ func main() {
 		if !ok {
 			os.Exit(1)
 		}
+	case "preflight", "backup", "restore-test":
+		os.Exit(localOperation(cmd, cfg, db, *role, *relDir))
 	case "run":
-		runService(func(ctx context.Context) error { return run(ctx, cfg, col, logger) })
+		runner := &ops.Runner{Cfg: cfg, Monitor: db, Version: Version}
+		runService(func(ctx context.Context) error { return run(ctx, cfg, col, runner, logger) })
 	}
 }
 
@@ -150,7 +169,7 @@ func openDB(cfg *config.Config) (*sql.DB, error) {
 }
 
 // run collecte périodiquement et vide la file vers le Control Plane.
-func run(ctx context.Context, cfg *config.Config, col *collector.Collector, log *slog.Logger) error {
+func run(ctx context.Context, cfg *config.Config, col *collector.Collector, runner *ops.Runner, log *slog.Logger) error {
 	log.Info("démarrage de l'agent", "version", Version, "intervalle", cfg.Interval().String(), "controlPlane", cfg.ControlPlaneURL)
 	var cl *client.Client
 	if cfg.ControlPlaneURL != "" {
@@ -170,7 +189,11 @@ func run(ctx context.Context, cfg *config.Config, col *collector.Collector, log 
 	failures := 0
 	var nextAttempt time.Time
 
+	jobs := &jobWorker{client: cl, runner: runner, log: log}
 	tick := func() {
+		if cl != nil {
+			jobs.poll(ctx)
+		}
 		r := col.Collect(ctx)
 		if !r.Reachable {
 			log.Warn("MariaDB injoignable", "erreurs", r.Errors)
@@ -208,6 +231,7 @@ func run(ctx context.Context, cfg *config.Config, col *collector.Collector, log 
 	for {
 		select {
 		case <-ctx.Done():
+			jobs.wait()
 			log.Info("arrêt de l'agent", "enAttente", queue.Len())
 			return nil
 		case <-ticker.C:

@@ -13,6 +13,11 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class Jobs {
     @Inject MonitoringService monitoring;
+    @Inject BackupService backups;
+    @Inject OperationService operations;
+
+    @ConfigProperty(name = "prm.operations.stale-after", defaultValue = "PT2H")
+    java.time.Duration staleAfter;
 
     @ConfigProperty(name = "prm.metrics.retention-days", defaultValue = "30")
     int retentionDays;
@@ -21,6 +26,13 @@ public class Jobs {
             concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void evaluate() {
         monitoring.evaluateAll();
+    }
+
+    @Scheduled(every = "${prm.backup.schedule-interval:60s}", delayed = "20s",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    void scheduleBackups() {
+        operations.markStale(staleAfter);
+        backups.schedule(Instant.now());
     }
 
     @Scheduled(cron = "0 15 3 * * ?")

@@ -22,4 +22,16 @@ public class Topology extends PanacheEntityBase {
     @Column(name = "disk_crit_pct") public int diskCritPct = 10;
     @Column(name = "agent_silence_seconds") public int agentSilenceSeconds = 90;
     @Column(name = "created_at") public Instant createdAt = Instant.now();
+
+    // Politique de sauvegarde (Lot 2)
+    @Column(name = "backup_enabled") public boolean backupEnabled;
+    /** Nœud qui exécute les sauvegardes (la réplique en mode A, §4). */
+    @Column(name = "backup_node_id") public UUID backupNodeId;
+    /** Nœud qui exécute les restaurations de contrôle. */
+    @Column(name = "restore_node_id") public UUID restoreNodeId;
+    @Column(name = "backup_hour") public int backupHour = 2;
+    @Column(name = "backup_keep") public int backupKeep = 7;
+    /** 1 = lundi … 7 = dimanche. */
+    @Column(name = "restore_test_weekday") public int restoreTestWeekday = 7;
+    @Column(name = "backup_max_age_hours") public int backupMaxAgeHours = 26;
 }
