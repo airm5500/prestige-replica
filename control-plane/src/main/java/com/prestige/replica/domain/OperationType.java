@@ -22,7 +22,9 @@ public enum OperationType {
     // Lot 4
     /** Bascule d'urgence : le primaire est perdu ; perte possible des dernières transactions. */
     FAILOVER(true, "Bascule d'urgence (primaire perdu)", true),
-    FENCE(false, "Isolement de l'ancien primaire");
+    FENCE(false, "Isolement de l'ancien primaire"),
+    /** Exercice de panne : bascule planifiée aller puis retour, mesurée, éventuellement programmée la nuit. */
+    DRILL(true, "Exercice de bascule (aller-retour)", true);
 
     public final boolean requiresApproval;
     public final String label;

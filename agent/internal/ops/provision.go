@@ -149,6 +149,13 @@ func (r *Runner) Provision(ctx context.Context, p ProvisionParams, rep Reporter)
 		return map[string]any{"replication": state, "previousDataDir": old}, fmt.Errorf("%w : %v", ErrIntervention, err)
 	}
 	rep.Step("réplique opérationnelle ; ancien datadir conservé dans " + old)
+	if r.Fenced() {
+		if err := r.Unfence(); err != nil {
+			rep.Warn("marqueur d'isolement non supprimé : " + err.Error())
+		} else {
+			rep.Step("serveur reconstruit : isolement local levé")
+		}
+	}
 	return map[string]any{
 		"backupId":        m.BackupID,
 		"gtidStart":       m.GTID,

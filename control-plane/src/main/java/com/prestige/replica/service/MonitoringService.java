@@ -136,6 +136,7 @@ public class MonitoringService {
         if (!topo.maintenance) {
             f.addAll(AlertRules.evaluateTopology(ids));
             f.addAll(backups.get().findings(topo, now));
+            f.addAll(replication.get().drillFindings(topo, now));
         }
         incidents.reconcile(IncidentService.Scope.topology(topo.tenantId, topo.siteId, topo.id), f, now);
     }

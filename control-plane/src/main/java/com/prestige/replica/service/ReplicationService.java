@@ -299,6 +299,10 @@ public class ReplicationService {
         Topology t = Topology.findById(parent.topologyId);
         DatabaseNode target = DatabaseNode.findById(UUID.fromString(p.path("targetId").asText()));
         DatabaseNode old = DatabaseNode.findById(UUID.fromString(p.path("oldPrimaryId").asText()));
+        if (parent.type == OperationType.DRILL && p.hasNonNull("notBefore") && Instant.parse(p.path("notBefore").asText()).isAfter(Instant.now())) {
+            ops.event(parent, "INFO", "Exercice programmé : démarrage à " + p.path("notBefore").asText().substring(0, 16).replace('T', ' ') + " UTC");
+            return; // reste en file ; advanceDrills le lancera à l'heure
+        }
         parent.status = OperationStatus.RUNNING;
         parent.startedAt = Instant.now();
         parent.lastEventAt = parent.startedAt;
@@ -313,6 +317,10 @@ public class ReplicationService {
         parent.params = ops.write(pm);
         t.maintenance = true; // aucune alerte parasite pendant les quelques secondes de bascule
         ops.event(parent, "INFO", "Contrôles validés ; topologie en maintenance pendant la bascule");
+        demote(parent, old);
+    }
+
+    private void demote(Operation parent, DatabaseNode old) {
         ops.event(parent, "INFO", "Étape 1 : rétrogradation de " + old.name);
         ops.requestChild(parent, OperationType.SWITCHOVER_DEMOTE, old, Map.of("maxWaitSeconds", 30),
                 "Mettre " + old.name + " en lecture seule et constater l'arrêt des écritures");
@@ -369,7 +377,7 @@ public class ReplicationService {
                 target.expectedRole = NodeRole.PRIMARY;
                 if (t.backupNodeId != null && t.backupNodeId.equals(target.id)) t.backupNodeId = old.id;
                 Instant stopped = Instant.parse(p.path("writesStoppedAt").asText(child.finishedAt.toString()));
-                Operation demote = Operation.find("parentId = ?1 and type = ?2", parent.id, OperationType.SWITCHOVER_DEMOTE).firstResult();
+                Operation demote = Operation.find("parentId = ?1 and type = ?2 order by requestedAt desc", parent.id, OperationType.SWITCHOVER_DEMOTE).firstResult();
                 Instant from = demote != null && demote.startedAt != null ? demote.startedAt : stopped;
                 long unavailableMs = Duration.between(from, child.finishedAt).toMillis();
                 p.put("newPrimaryGtid", result.path("gtid").asText(""));
@@ -377,7 +385,9 @@ public class ReplicationService {
                 parent.params = ops.write(p);
                 ops.event(parent, "INFO", target.name + " est le nouveau primaire (position " + result.path("gtid").asText("") + ") ; écritures interrompues "
                         + String.format(Locale.FRANCE, "%.1f", unavailableMs / 1000.0) + " s");
-                ops.event(parent, "WARN", "Action manuelle : faire pointer Prestige vers " + target.addressLabel + " (au lieu de " + old.addressLabel + ")");
+                if (parent.type != OperationType.DRILL) {
+                    ops.event(parent, "WARN", "Sans routeur de connexion : faire pointer Prestige vers " + target.addressLabel + " (au lieu de " + old.addressLabel + ")");
+                }
                 String[] hp = BackupService.hostPort(target.addressLabel);
                 int attached = 0;
                 for (DatabaseNode n : DatabaseNode.<DatabaseNode>list("topologyId", t.id)) {
@@ -391,7 +401,7 @@ public class ReplicationService {
                     attached++;
                 }
                 if (attached == 0) {
-                    finish(parent, OperationStatus.SUCCEEDED, null, t);
+                    switchoverDone(parent, t);
                 } else {
                     ops.event(parent, "INFO", "Étape 3 : rattachement de " + attached + " serveur(s) à " + target.name);
                 }
@@ -406,7 +416,7 @@ public class ReplicationService {
                 if (Operation.count("parentId = ?1 and type = ?2 and status in ?3", parent.id, OperationType.REPLICA_ATTACH,
                         List.of(OperationStatus.QUEUED, OperationStatus.RUNNING)) > 0) return;
                 long failed = Operation.count("parentId = ?1 and type = ?2 and status <> ?3", parent.id, OperationType.REPLICA_ATTACH, OperationStatus.SUCCEEDED);
-                if (failed == 0) finish(parent, OperationStatus.SUCCEEDED, null, t);
+                if (failed == 0) switchoverDone(parent, t);
                 else finish(parent, OperationStatus.INTERVENTION_REQUIRED, target.name + " est primaire, mais " + failed
                         + " rattachement(s) ont échoué : voir les étapes", t);
             }
@@ -424,15 +434,129 @@ public class ReplicationService {
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("finalGtid", p.path("finalGtid").asText(null));
         if (p.has("lossEstimate")) res.put("lossEstimate", p.path("lossEstimate").asText());
+        if (parent.type == OperationType.DRILL) {
+            res.put("phase", p.path("phase").asInt(1));
+            if (p.has("outbound")) res.put("outbound", p.get("outbound"));
+        }
         res.put("newPrimaryGtid", p.path("newPrimaryGtid").asText(null));
         if (p.has("writeUnavailableMs")) res.put("writeUnavailableMs", p.path("writeUnavailableMs").asLong());
         res.put("totalSeconds", parent.startedAt == null ? null : Duration.between(parent.startedAt, parent.finishedAt).toSeconds());
         res.put("newPrimary", st == OperationStatus.SUCCEEDED || p.has("newPrimaryGtid") ? p.path("newAddress").asText() : p.path("oldAddress").asText());
         parent.result = ops.write(res);
         ops.event(parent, st == OperationStatus.SUCCEEDED ? "INFO" : "ERROR",
-                st == OperationStatus.SUCCEEDED ? (parent.type == OperationType.FAILOVER ? "Bascule d'urgence terminée" : "Bascule terminée avec succès") : error);
-        audit.record("system", (parent.type == OperationType.FAILOVER ? "FAILOVER_" : "SWITCHOVER_") + st, "operation:" + parent.id, st == OperationStatus.SUCCEEDED ? "SUCCESS" : "FAILURE",
+                st == OperationStatus.SUCCEEDED ? (parent.type == OperationType.FAILOVER ? "Bascule d'urgence terminée"
+                        : parent.type == OperationType.DRILL ? "Exercice réussi : aller et retour sans perte" : "Bascule terminée avec succès") : error);
+        audit.record("system", (parent.type == OperationType.FAILOVER ? "FAILOVER_" : parent.type == OperationType.DRILL ? "DRILL_" : "SWITCHOVER_") + st, "operation:" + parent.id, st == OperationStatus.SUCCEEDED ? "SUCCESS" : "FAILURE",
                 parent.tenantId, parent.siteId, parent.summary + (error == null ? "" : " — " + error));
+    }
+
+    // ---- Exercices de panne (Lot 4) ------------------------------------------
+
+    static final Duration DRILL_RETURN_TIMEOUT = Duration.ofMinutes(10);
+
+    @Transactional(Transactional.TxType.MANDATORY)
+    public Operation requestDrill(Topology t, DatabaseNode target, Instant notBefore, String topologyConfirmation, String actor) {
+        if (topologyConfirmation == null || !t.name.equals(topologyConfirmation.trim())) {
+            throw new BadRequestException("Saisissez exactement le nom de la topologie pour confirmer");
+        }
+        Instant now = Instant.now();
+        if (notBefore != null && (notBefore.isBefore(now.minusSeconds(60)) || notBefore.isAfter(now.plus(Duration.ofDays(30))))) {
+            throw new BadRequestException("Heure de l'exercice : maintenant ou dans les 30 prochains jours");
+        }
+        SwitchoverPlan p = plan(t, target, now);
+        if (!p.ready()) throw new BadRequestException("Contrôles préalables non satisfaits : " + failures(p));
+        DatabaseNode home = DatabaseNode.find("topologyId = ?1 and expectedRole = ?2", t.id, NodeRole.PRIMARY).firstResult();
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("oldPrimaryId", home.id.toString());
+        params.put("targetId", target.id.toString());
+        params.put("homePrimaryId", home.id.toString());
+        params.put("reattachOldPrimary", true);
+        params.put("oldAddress", home.addressLabel);
+        params.put("newAddress", target.addressLabel);
+        params.put("phase", 1);
+        if (notBefore != null && notBefore.isAfter(now)) params.put("notBefore", notBefore.toString());
+        return ops.request(OperationType.DRILL, target, params, "Exercice de bascule : " + home.name + " → " + target.name + " → " + home.name
+                + " (" + t.name + ")" + (params.containsKey("notBefore") ? ", programmé" : ""), actor);
+    }
+
+    /** Fin d'une bascule réussie (rattachements compris) ; un exercice enchaîne sur le retour. */
+    private void switchoverDone(Operation parent, Topology t) {
+        if (parent.type != OperationType.DRILL) {
+            finish(parent, OperationStatus.SUCCEEDED, null, t);
+            return;
+        }
+        ObjectNode p = (ObjectNode) ops.read(parent.params);
+        if (p.path("phase").asInt(1) == 2) {
+            finish(parent, OperationStatus.SUCCEEDED, null, t);
+            return;
+        }
+        ObjectNode out = p.putObject("outbound");
+        out.put("writeUnavailableMs", p.path("writeUnavailableMs").asLong());
+        out.put("finalGtid", p.path("finalGtid").asText(""));
+        out.put("newPrimaryGtid", p.path("newPrimaryGtid").asText(""));
+        out.put("newPrimary", p.path("newAddress").asText(""));
+        p.put("returnWaitSince", Instant.now().toString());
+        parent.params = ops.write(p);
+        ops.event(parent, "INFO", "Aller réussi. Retour dès que " + DatabaseNode.<DatabaseNode>findById(UUID.fromString(p.path("homePrimaryId").asText())).name
+                + " a rattrapé son retard (prochain rapport de son agent)");
+    }
+
+    /** Lance les exercices programmés arrivés à échéance, et le retour des exercices dont l'aller est terminé. */
+    @Transactional
+    public void advanceDrills(Instant now) {
+        for (Operation d : Operation.<Operation>list("type = ?1 and status = ?2 and approvedAt is not null", OperationType.DRILL, OperationStatus.QUEUED)) {
+            JsonNode p = ops.read(d.params);
+            if (!p.hasNonNull("notBefore") || !Instant.parse(p.path("notBefore").asText()).isAfter(now)) {
+                ((ObjectNode) p).remove("notBefore");
+                d.params = ops.write(p);
+                ops.event(d, "INFO", "Heure de l'exercice atteinte : démarrage");
+                start(d);
+            }
+        }
+        for (Operation d : Operation.<Operation>list("type = ?1 and status = ?2", OperationType.DRILL, OperationStatus.RUNNING)) {
+            ObjectNode p = (ObjectNode) ops.read(d.params);
+            if (!p.hasNonNull("returnWaitSince")) continue;
+            Topology t = Topology.findById(d.topologyId);
+            DatabaseNode home = DatabaseNode.findById(UUID.fromString(p.path("homePrimaryId").asText()));
+            DatabaseNode current = DatabaseNode.findById(UUID.fromString(p.path("targetId").asText()));
+            SwitchoverPlan plan = plan(t, home, now, d.id);
+            if (plan.ready()) {
+                p.remove("returnWaitSince");
+                p.put("phase", 2);
+                p.put("oldPrimaryId", current.id.toString());
+                p.put("targetId", home.id.toString());
+                p.put("oldAddress", current.addressLabel);
+                p.put("newAddress", home.addressLabel);
+                p.remove(List.of("finalGtid", "writesStoppedAt", "newPrimaryGtid", "writeUnavailableMs"));
+                d.params = ops.write(p);
+                d.lastEventAt = now;
+                ops.event(d, "INFO", "Retour : " + current.name + " → " + home.name);
+                demote(d, current);
+            } else if (Duration.between(Instant.parse(p.path("returnWaitSince").asText()), now).compareTo(DRILL_RETURN_TIMEOUT) > 0) {
+                finish(d, OperationStatus.INTERVENTION_REQUIRED, "Aller réussi, mais retour impossible depuis 10 min : " + failures(plan)
+                        + ". " + current.name + " reste primaire, sans perte ; relancez une bascule planifiée vers " + home.name + " quand les contrôles sont verts.", t);
+            }
+        }
+    }
+
+    /** Rappel si aucun exercice réussi récent (§20, procédures de crise éprouvées). */
+    @Transactional(Transactional.TxType.MANDATORY)
+    public List<com.prestige.replica.alert.Finding> drillFindings(Topology t, Instant now) {
+        if (t.drillMaxAgeDays <= 0) return List.of();
+        if (DatabaseNode.count("topologyId = ?1 and expectedRole = ?2", t.id, NodeRole.REPLICA) == 0) return List.of();
+        Operation last = Operation.find("topologyId = ?1 and type = ?2 and status = ?3 order by finishedAt desc",
+                t.id, OperationType.DRILL, OperationStatus.SUCCEEDED).firstResult();
+        // Une vraie bascule planifiée réussie vaut exercice.
+        Operation real = Operation.find("topologyId = ?1 and type = ?2 and status = ?3 order by finishedAt desc",
+                t.id, OperationType.SWITCHOVER, OperationStatus.SUCCEEDED).firstResult();
+        Instant at = last == null ? null : last.finishedAt;
+        if (real != null && real.finishedAt != null && (at == null || real.finishedAt.isAfter(at))) at = real.finishedAt;
+        Instant since = at != null ? at : t.createdAt;
+        if (since == null || Duration.between(since, now).toDays() < t.drillMaxAgeDays) return List.of();
+        return List.of(new com.prestige.replica.alert.Finding("DRILL_OVERDUE", "", com.prestige.replica.domain.Severity.WARNING,
+                at == null ? "Aucun exercice de bascule réussi : la procédure de reprise n'a jamais été éprouvée"
+                        : "Dernier exercice de bascule réussi il y a " + Duration.between(at, now).toDays() + " jours",
+                "Programmez un exercice aller-retour en dehors des heures d'ouverture (Bascule → Exercice)"));
     }
 
     // ---- Bascule d'urgence (Lot 4) -------------------------------------------

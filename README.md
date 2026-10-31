@@ -4,7 +4,7 @@ Application autonome pour **superviser, puis à terme déployer, réparer et aud
 
 L'application pilote les mécanismes natifs de MariaDB (binlog, GTID, `mariadb-backup`) ; elle ne réimplémente jamais la réplication. Si la console s'arrête, la réplication MariaDB continue.
 
-> **État : Lots 1 à 4.** Observation du parc (lecture seule) ; sauvegardes `mariadb-backup` chiffrées et vérifiées par restauration ; construction assistée d'une réplique ; pause/reprise, réparation guidée et bascule planifiée sans perte avec double approbation et rapport d'opération ; routeur de connexion (adresse fixe pour Prestige), bascule d'urgence assistée avec isolement de l'ancien primaire, procédure sans console. Détails : [lot 1](docs/perimetre-lot1.md), [lot 2](docs/perimetre-lot2.md), [lot 3](docs/perimetre-lot3.md), [lot 4](docs/perimetre-lot4.md). En cas de panne : [procédure d'urgence](docs/procedure-urgence.md).
+> **État : Lots 1 à 4.** Observation du parc (lecture seule) ; sauvegardes `mariadb-backup` chiffrées et vérifiées par restauration ; construction assistée d'une réplique ; pause/reprise, réparation guidée et bascule planifiée sans perte avec double approbation et rapport d'opération ; routeur de connexion (adresse fixe pour Prestige), bascule d'urgence assistée avec isolement persistant de l'ancien primaire, exercices de panne programmables, procédure sans console. Détails : [lot 1](docs/perimetre-lot1.md), [lot 2](docs/perimetre-lot2.md), [lot 3](docs/perimetre-lot3.md), [lot 4](docs/perimetre-lot4.md). En cas de panne : [procédure d'urgence](docs/procedure-urgence.md).
 
 ![Accueil du parc](docs/images/parc.png)
 

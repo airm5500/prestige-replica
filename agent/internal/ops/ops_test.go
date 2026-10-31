@@ -95,11 +95,6 @@ func TestVersionLess(t *testing.T) {
 	}
 }
 
-type nopRep struct{}
-
-func (nopRep) Step(string) {}
-func (nopRep) Warn(string) {}
-
 func TestControlRequiresLocalOptIn(t *testing.T) {
 	r := &Runner{Cfg: &config.Config{}}
 	for _, typ := range []string{TypeReplicationPause, TypeReplicationResume, TypeSwitchoverDemote, TypeSwitchoverPromote, TypeSwitchoverUndo, TypeReplicaAttach, TypeFence} {
@@ -120,3 +115,25 @@ func TestControlRequiresLocalOptIn(t *testing.T) {
 		t.Error("hôte invalide accepté")
 	}
 }
+
+func TestFenceMarkerLifecycle(t *testing.T) {
+	r := &Runner{Cfg: &config.Config{StateDir: t.TempDir()}}
+	if r.Fenced() {
+		t.Fatal("isolé sans marqueur")
+	}
+	r.markFenced(nopRep{}, "test")
+	if !r.Fenced() {
+		t.Fatal("marqueur absent après isolement")
+	}
+	if err := r.Unfence(); err != nil || r.Fenced() {
+		t.Fatalf("levée d'isolement : %v", err)
+	}
+	if err := r.Unfence(); err != nil {
+		t.Fatal("levée d'un isolement inexistant doit être sans effet")
+	}
+}
+
+type nopRep struct{}
+
+func (nopRep) Step(string) {}
+func (nopRep) Warn(string) {}

@@ -12,7 +12,7 @@ export interface Topology {
   id: string; tenantId: string; siteId: string; name: string; mode: string; maintenance: boolean
   lagWarnSeconds: number; lagCritSeconds: number; diskWarnPct: number; diskCritPct: number; agentSilenceSeconds: number
   backupEnabled: boolean; backupNodeId: string | null; restoreNodeId: string | null; backupHour: number; backupKeep: number
-  restoreTestWeekday: number; backupMaxAgeHours: number
+  restoreTestWeekday: number; backupMaxAgeHours: number; drillMaxAgeDays: number
 }
 export interface ChannelView {
   name: string; source: string; ioRunning: string; sqlRunning: string; lagSeconds: number | null; sqlDelay: number
@@ -44,7 +44,7 @@ export interface NotificationChannel { id: string; tenantId: string; siteId: str
 export interface UserOut { id: string; username: string; role: string; tenantId: string | null; siteId: string | null; displayName: string | null; enabled: boolean }
 
 export type OperationType = 'PREFLIGHT' | 'BACKUP_FULL' | 'RESTORE_TEST' | 'BACKUP_PRUNE' | 'PROVISION_REPLICA'
-  | 'REPLICATION_PAUSE' | 'REPLICATION_RESUME' | 'SWITCHOVER' | 'SWITCHOVER_DEMOTE' | 'SWITCHOVER_PROMOTE' | 'SWITCHOVER_UNDO' | 'REPLICA_ATTACH' | 'FAILOVER' | 'FENCE'
+  | 'REPLICATION_PAUSE' | 'REPLICATION_RESUME' | 'SWITCHOVER' | 'SWITCHOVER_DEMOTE' | 'SWITCHOVER_PROMOTE' | 'SWITCHOVER_UNDO' | 'REPLICA_ATTACH' | 'FAILOVER' | 'FENCE' | 'DRILL'
 export type OperationStatus = 'AWAITING_APPROVAL' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'INTERVENTION_REQUIRED' | 'CANCELLED'
 export interface Operation {
   id: string; tenantId: string; siteId: string; topologyId: string | null; nodeId: string; type: OperationType; status: OperationStatus
@@ -163,7 +163,7 @@ export const api = {
   setBackupPolicy: (topologyId: string, b: BackupPolicy) => request<Topology>('PUT', `api/v1/topologies/${topologyId}/backup-policy`, b),
   provision: (topologyId: string, b: { targetNodeId: string; backupId: string; confirmDataDir: string; delaySeconds: number; topologyConfirmation: string }) =>
     request<Operation>('POST', `api/v1/topologies/${topologyId}/replicas/provision`, b),
-  operations: (q: { status?: string; nodeId?: string; limit?: number } = {}) => {
+  operations: (q: { status?: string; nodeId?: string; topologyId?: string; type?: OperationType; limit?: number } = {}) => {
     const p = new URLSearchParams()
     Object.entries(q).forEach(([k, v]) => { if (v !== undefined && v !== '') p.set(k, String(v)) })
     return request<Operation[]>('GET', `api/v1/operations?${p}`)
@@ -181,6 +181,10 @@ export const api = {
     request<FailoverPlan>('POST', `api/v1/topologies/${topologyId}/failover/plan`, { targetNodeId }),
   failover: (topologyId: string, b: { targetNodeId: string | null; fencingConfirmed: boolean; topologyConfirmation: string }) =>
     request<Operation>('POST', `api/v1/topologies/${topologyId}/failover`, b),
+  drill: (topologyId: string, b: { targetNodeId: string; notBefore: string | null; topologyConfirmation: string }) =>
+    request<Operation>('POST', `api/v1/topologies/${topologyId}/drill`, b),
+  drillPolicy: (topologyId: string, drillMaxAgeDays: number) =>
+    request<Topology>('PUT', `api/v1/topologies/${topologyId}/drill-policy`, { drillMaxAgeDays }),
   declareManualFailover: (topologyId: string, b: { newPrimaryNodeId: string; topologyConfirmation: string }) =>
     request<void>('POST', `api/v1/topologies/${topologyId}/failover/declare-manual`, b),
   switchoverPlan: (topologyId: string, targetNodeId: string) => request<SwitchoverPlan>('POST', `api/v1/topologies/${topologyId}/switchover/plan`, { targetNodeId }),

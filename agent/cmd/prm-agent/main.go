@@ -54,6 +54,7 @@ CLI de secours (fonctionne sans console, avec la configuration locale) :
 Urgence, console injoignable (voir docs/procedure-urgence.md) :
   prm-agent fence   -config agent.json      isole CE serveur (lecture seule, connexions coupées)
   prm-agent promote -config agent.json      promeut CETTE réplique après application de tout ce qu'elle a reçu
+  prm-agent unfence -config agent.json      lève l'isolement local (après reconstruction manuelle uniquement)
 `, Version)
 }
 
@@ -115,6 +116,9 @@ func main() {
 			_ = enc.Encode(r)
 		} else {
 			printStatus(r)
+			if (&ops.Runner{Cfg: cfg}).Fenced() {
+				fmt.Println("ISOLÉ : ancien primaire après une bascule d'urgence. Maintenu en lecture seule par l'agent ; ne pas rouvrir, reconstruire.")
+			}
 		}
 		if !r.Reachable {
 			os.Exit(1)
@@ -141,6 +145,18 @@ func main() {
 		if !ok {
 			os.Exit(1)
 		}
+	case "unfence":
+		r := &ops.Runner{Cfg: cfg, Monitor: db, Version: Version}
+		if !r.Fenced() {
+			fmt.Println("Ce serveur n'est pas isolé.")
+			return
+		}
+		if err := r.Unfence(); err != nil {
+			fmt.Fprintln(os.Stderr, "Échec :", err)
+			os.Exit(1)
+		}
+		fmt.Println("Isolement local levé. MariaDB n'est pas rouvert en écriture : à faire explicitement si c'est voulu.")
+		return
 	case "preflight", "backup", "restore-test", "fence", "promote":
 		os.Exit(localOperation(cmd, cfg, db, *role, *relDir))
 	case "run":
@@ -157,6 +173,9 @@ func main() {
 						logger.Error("routeur arrêté", "erreur", err.Error())
 					}
 				}()
+			}
+			if cfg.ReplicationControl.Enabled {
+				go guardFence(ctx, runner, logger)
 			}
 			return run(ctx, cfg, col, runner, logger)
 		})
@@ -353,4 +372,26 @@ func runRouterStandalone(path string, log *slog.Logger) {
 		}
 	}()
 	runService("PrestigeReplicaRouter", rt.Run)
+}
+
+type logReporter struct{ log *slog.Logger }
+
+func (l logReporter) Step(m string) { l.log.Info(m) }
+func (l logReporter) Warn(m string) { l.log.Warn(m) }
+
+// guardFence surveille toutes les 2 s un serveur isolé et le remet en lecture
+// seule s'il redevient accessible en écriture, même sans console.
+func guardFence(ctx context.Context, r *ops.Runner, log *slog.Logger) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if _, err := r.GuardFence(ctx, logReporter{log}); err != nil {
+				log.Warn("contrôle d'isolement", "erreur", err.Error())
+			}
+		}
+	}
 }

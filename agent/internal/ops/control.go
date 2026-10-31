@@ -3,8 +3,11 @@ package ops
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -442,10 +445,12 @@ func (r *Runner) Fence(ctx context.Context, p FenceParams, rep Reporter) (map[st
 		}
 		killed, _ := r.killClients(ctx, db, rep)
 		pos, _ := scalar(ctx, db, "SELECT @@gtid_binlog_pos")
+		r.markFenced(rep, "lecture seule ; dernière position "+pos)
 		rep.Step("serveur isolé ; dernière position locale " + pos)
 		return map[string]any{"fenced": true, "readOnly": true, "killedConnections": killed, "gtidBinlogPos": pos}, nil
 	}
 	rep.Warn("MariaDB ne répond pas : " + err.Error())
+	r.markFenced(rep, "MariaDB injoignable au moment de l'isolement")
 	if !p.StopService {
 		return map[string]any{"fenced": true, "mariadbDown": true}, nil
 	}
@@ -511,4 +516,70 @@ func (r *Runner) disableAutoStart(ctx context.Context) error {
 	}
 	_, err := run(cctx, nil, nil, "systemctl", "disable", name)
 	return err
+}
+
+// ---- Isolement persistant -------------------------------------------------
+//
+// Un serveur isolé garde un marqueur local. Tant qu'il existe, l'agent remet
+// MariaDB en lecture seule dès qu'il le trouve en écriture (redémarrage après
+// une coupure de courant, relance manuelle), sans attendre la console. Seule
+// une reconstruction réussie (ou « prm-agent unfence ») le supprime.
+
+// markerPath : un marqueur par instance MariaDB, pour que deux agents dont les
+// configurations partagent un dossier ne s'isolent pas mutuellement.
+func (r *Runner) markerPath() string {
+	id := strings.Map(func(c rune) rune {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			return c
+		}
+		return '_'
+	}, r.Cfg.MariaDB.Address)
+	return filepath.Join(r.Cfg.StateDir, "fenced-"+id+".json")
+}
+
+// Fenced indique si ce serveur est isolé localement.
+func (r *Runner) Fenced() bool {
+	_, err := os.Stat(r.markerPath())
+	return err == nil
+}
+
+func (r *Runner) markFenced(rep Reporter, reason string) {
+	b, _ := json.Marshal(map[string]string{"at": time.Now().UTC().Format(time.RFC3339), "reason": reason})
+	if err := os.WriteFile(r.markerPath(), b, 0o600); err != nil {
+		rep.Warn("marqueur d'isolement non écrit (" + err.Error() + ") : la remise en lecture seule après redémarrage dépendra de la console")
+	}
+}
+
+// Unfence lève l'isolement local.
+func (r *Runner) Unfence() error {
+	err := os.Remove(r.markerPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+// GuardFence remet le serveur en lecture seule s'il est isolé et accessible en
+// écriture. Renvoie vrai si une correction a été faite.
+func (r *Runner) GuardFence(ctx context.Context, rep Reporter) (bool, error) {
+	if !r.Fenced() {
+		return false, nil
+	}
+	db, err := r.controlDB()
+	if err != nil {
+		return false, err
+	}
+	defer db.Close()
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	ro, err := scalar(cctx, db, "SELECT @@read_only")
+	if err != nil || ro == "1" {
+		return false, nil // MariaDB arrêté ou déjà protégé
+	}
+	if _, err := db.ExecContext(ctx, "SET GLOBAL read_only = ON"); err != nil {
+		return false, fmt.Errorf("SET GLOBAL read_only : %w", err)
+	}
+	killed, _ := r.killClients(ctx, db, rep)
+	rep.Warn(fmt.Sprintf("serveur isolé trouvé en écriture : remis en lecture seule, %d connexion(s) coupée(s)", killed))
+	return true, nil
 }

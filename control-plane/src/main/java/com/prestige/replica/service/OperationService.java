@@ -120,8 +120,8 @@ public class OperationService {
 
     @Transactional
     public boolean switchoverRunning(UUID topologyId) {
-        return topologyId != null && Operation.count("topologyId = ?1 and type = ?2 and status = ?3", topologyId,
-                OperationType.SWITCHOVER, OperationStatus.RUNNING) > 0;
+        return topologyId != null && Operation.count("topologyId = ?1 and type in ?2 and status = ?3", topologyId,
+                List.of(OperationType.SWITCHOVER, OperationType.DRILL, OperationType.FAILOVER), OperationStatus.RUNNING) > 0;
     }
 
     @Transactional

@@ -37,6 +37,11 @@ public class Jobs {
         backups.schedule(Instant.now());
     }
 
+    @Scheduled(every = "${prm.drill.interval:5s}", delayed = "15s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    void drills() {
+        replication.advanceDrills(Instant.now());
+    }
+
     @Scheduled(cron = "0 15 3 * * ?")
     @Transactional
     void purgeMetrics() {

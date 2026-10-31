@@ -87,3 +87,8 @@ Un administrateur déclare la bascule : **Bascule → Urgence → « Bascule dé
 - Imprimer le **rapport d'opération** (Opérations → l'opération → « Rapport d'opération imprimable »).
 - Si des ventes ont été perdues (perte estimée non nulle), les ressaisir à partir des tickets imprimés pendant la période indiquée.
 - Remettre le démarrage automatique de MariaDB sur l'ancien primaire **après** sa reconstruction : `sc config MariaDB start= auto`.
+- Un ancien primaire isolé par l'agent reste en lecture seule même s'il est relancé : c'est voulu. Ne lever l'isolement (`prm-agent unfence`) qu'après une reconstruction faite à la main.
+
+## S'entraîner
+
+Une fois par trimestre au moins : Bascule → **Exercice**, programmé à une heure de fermeture. La console rappelle l'échéance. Lire ensuite le rapport avec l'équipe et vérifier que cette fiche est toujours à jour (noms des serveurs, adresses, personnes à appeler).

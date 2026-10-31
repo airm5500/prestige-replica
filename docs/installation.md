@@ -192,5 +192,11 @@ Pour que l'agent puisse **arrêter MariaDB et désactiver son démarrage automat
 deploy\windows\grant-service-control.ps1 -MariaDbService MariaDB
 ```
 
+L'agent d'un serveur isolé le maintient en lecture seule (contrôle toutes les 2 s, marqueur dans le dossier de `agent.json`, ou `stateDir`), y compris après un redémarrage et sans console.
+
 Recommandé : `read_only=ON` dans le `my.ini` de **toutes** les répliques. Un ancien primaire qui redémarre seul revient ainsi en lecture seule. S'il revient malgré tout en écriture, le routeur refuse les connexions (deux primaires), la console le remet en lecture seule au rapport suivant de son agent et ouvre un incident critique « isolé de nouveau accessible en écriture ».
+
+### Exercices de panne
+
+Bascule → onglet **Exercice** : bascule planifiée vers une réplique puis retour automatique, programmable la nuit, avec double validation. À placer à distance de l'heure des sauvegardes (une sauvegarde en cours fait échouer les contrôles, sans effet). Le rappel par défaut est de 90 jours sans exercice réussi ; il se règle sur le même écran (0 = jamais).
 

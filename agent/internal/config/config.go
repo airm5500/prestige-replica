@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/airm5500/prestige-replica-manager/agent/internal/router"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -46,6 +47,8 @@ type Config struct {
 	ReplicationControl ReplicationControlConfig `json:"replicationControl"`
 	// Lot 4 : routeur de connexion (adresse stable pour Prestige).
 	Router router.Config `json:"router"`
+	// StateDir : état local persistant (marqueur d'isolement). Défaut : dossier du fichier de configuration.
+	StateDir string `json:"stateDir"`
 }
 
 // ReplicationControlConfig autorise le pilotage de la réplication de CE serveur
@@ -146,6 +149,9 @@ func Load(path string) (*Config, error) {
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&c); err != nil {
 		return nil, fmt.Errorf("configuration invalide: %w", err)
+	}
+	if c.StateDir == "" {
+		c.StateDir = filepath.Dir(path)
 	}
 	c.applyDefaults()
 	return &c, c.Validate()

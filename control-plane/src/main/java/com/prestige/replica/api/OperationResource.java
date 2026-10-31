@@ -41,6 +41,8 @@ public class OperationResource {
     public record SwitchoverPlanIn(@NotNull UUID targetNodeId) {}
     public record FailoverPlanIn(UUID targetNodeId) {}
     public record FailoverIn(UUID targetNodeId, boolean fencingConfirmed, @NotBlank String topologyConfirmation) {}
+    public record DrillIn(@NotNull UUID targetNodeId, java.time.Instant notBefore, @NotBlank String topologyConfirmation) {}
+    public record DrillPolicyIn(@jakarta.validation.constraints.Min(0) @jakarta.validation.constraints.Max(730) int drillMaxAgeDays) {}
     public record ManualFailoverIn(@NotNull UUID newPrimaryNodeId, @NotBlank String topologyConfirmation) {}
     public record SwitchoverIn(@NotNull UUID targetNodeId, boolean reattachOldPrimary, @NotBlank String topologyConfirmation) {}
 
@@ -141,6 +143,21 @@ public class OperationResource {
         return replication.requestFailover(topology(id), in.targetNodeId(), in.fencingConfirmed(), in.topologyConfirmation(), me.username());
     }
 
+    @POST @Path("/topologies/{id}/drill") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN})
+    public Operation drill(@PathParam("id") UUID id, @Valid DrillIn in) {
+        return replication.requestDrill(topology(id), node(in.targetNodeId()), in.notBefore(), in.topologyConfirmation(), me.username());
+    }
+
+    @PUT @Path("/topologies/{id}/drill-policy") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.SITE_ADMIN})
+    public Topology drillPolicy(@PathParam("id") UUID id, @Valid DrillPolicyIn in) {
+        Topology t = topology(id);
+        int before = t.drillMaxAgeDays;
+        t.drillMaxAgeDays = in.drillMaxAgeDays();
+        audit.record(me.username(), "TOPOLOGY_DRILL_POLICY", "topology:" + t.id, "SUCCESS", t.tenantId, t.siteId,
+                "rappel d'exercice " + before + " → " + t.drillMaxAgeDays + " jours");
+        return t;
+    }
+
     @POST @Path("/topologies/{id}/failover/declare-manual") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.SITE_ADMIN})
     public void declareManual(@PathParam("id") UUID id, @Valid ManualFailoverIn in) {
         replication.declareManualFailover(topology(id), node(in.newPrimaryNodeId()), in.topologyConfirmation(), me.username());
@@ -174,6 +191,7 @@ public class OperationResource {
 
     @GET @Path("/operations") @Transactional
     public List<Operation> operations(@QueryParam("status") String status, @QueryParam("nodeId") UUID nodeId,
+                                      @QueryParam("topologyId") UUID topologyId, @QueryParam("type") OperationType type,
                                       @QueryParam("limit") @DefaultValue("200") int limit) {
         CurrentUser.ScopeFilter f = me.filter("siteId");
         String q = f.clause();
@@ -187,6 +205,8 @@ public class OperationResource {
             }
         }
         if (nodeId != null) { q += " and nodeId = :node"; f.params().put("node", nodeId); }
+        if (topologyId != null) { q += " and topologyId = :topo"; f.params().put("topo", topologyId); }
+        if (type != null) { q += " and type = :type"; f.params().put("type", type); }
         return Operation.find(q + " ORDER BY requestedAt DESC", f.params()).page(0, Math.max(1, Math.min(limit, 1000))).list();
     }
 

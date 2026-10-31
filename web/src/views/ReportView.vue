@@ -11,6 +11,7 @@ onMounted(async () => {
   try { view.value = await api.operation(props.id) } catch (e) { error.value = (e as Error).message }
 })
 const op = computed(() => view.value?.operation ?? null)
+const sec = (ms: number | undefined | null) => (ms === undefined || ms === null ? '—' : `${(ms / 1000).toFixed(1).replace('.', ',')} s`)
 const result = computed(() => json<Record<string, any>>(op.value?.result))
 const generated = new Date().toLocaleString('fr-FR')
 const all = computed(() => (view.value ? [view.value, ...view.value.steps] : []))
@@ -31,6 +32,13 @@ const all = computed(() => (view.value ? [view.value, ...view.value.steps] : [])
         <tr><th>Demandée</th><td>{{ op.requestedBy }}, {{ date(op.requestedAt) }}</td></tr>
         <tr v-if="op.requiresApproval"><th>Approuvée</th><td>{{ op.approvedBy ? `${op.approvedBy}, ${date(op.approvedAt)}` : 'non approuvée' }}</td></tr>
         <tr><th>Exécution</th><td>{{ date(op.startedAt) }} → {{ date(op.finishedAt) }}</td></tr>
+        <template v-if="op.type === 'DRILL' && result">
+          <tr><th>Interruption à l'aller</th><td>{{ sec(result.outbound?.writeUnavailableMs) }}</td></tr>
+          <tr><th>Interruption au retour</th><td>{{ result.phase === 2 ? sec(result.writeUnavailableMs) : '—' }}</td></tr>
+          <tr><th>Durée totale</th><td>{{ duration(result.totalSeconds) }}</td></tr>
+          <tr><th>Primaire à la fin</th><td class="mono">{{ result.newPrimary }}</td></tr>
+          <tr><th>Objectif de reprise (moins de 5 min)</th><td>{{ op.status === 'SUCCEEDED' ? 'bascule technique en quelques secondes ; le délai réel dépend surtout de la détection et des deux validations' : 'non démontré' }}</td></tr>
+        </template>
         <template v-if="(op.type === 'SWITCHOVER' || op.type === 'FAILOVER') && result">
           <tr><th>Primaire après l'opération</th><td class="mono">{{ result.newPrimary }}</td></tr>
           <tr><th>{{ op.type === 'FAILOVER' ? 'Durée sans primaire (depuis le lancement)' : 'Écritures interrompues' }}</th><td>{{ result.writeUnavailableMs != null ? `${(result.writeUnavailableMs / 1000).toFixed(1).replace('.', ',')} s` : '—' }}</td></tr>

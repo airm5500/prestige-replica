@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api, type NodeSummary, type SiteSummary, type SwitchoverPlan, type FailoverPlan, type Topology } from '../api'
+import { api, type NodeSummary, type SiteSummary, type SwitchoverPlan, type FailoverPlan, type Operation, type Topology } from '../api'
 import { useSession } from '../stores/session'
-import { duration, roleLabel } from '../format'
+import { date, duration, opStatusLabel, roleLabel } from '../format'
 
 const session = useSession()
 const router = useRouter()
 const route = useRoute()
-const mode = ref<'planned' | 'urgent'>(route.query.mode === 'urgent' ? 'urgent' : 'planned')
+type Mode = 'planned' | 'urgent' | 'drill'
+const mode = ref<Mode>(route.query.mode === 'urgent' || route.query.mode === 'drill' ? route.query.mode : 'planned')
+const when = ref('')
+const drills = ref<Operation[]>([])
+const policyDays = ref(90)
 const fplan = ref<FailoverPlan | null>(null)
 const fenced = ref(false)
 const fleet = ref<SiteSummary[]>([])
@@ -38,9 +42,19 @@ async function load() {
 const reset = () => { plan.value = null; fplan.value = null; fenced.value = false; confirmation.value = '' }
 watch(topoId, () => { targetId.value = mode.value === 'urgent' ? '' : candidates.value[0]?.id ?? ''; reset() })
 watch(targetId, reset)
-watch(mode, (m) => { targetId.value = m === 'urgent' ? '' : candidates.value[0]?.id ?? ''; reset(); router.replace({ query: m === 'urgent' ? { mode: 'urgent' } : {} }) })
+watch(mode, (m) => { targetId.value = m === 'urgent' ? '' : candidates.value[0]?.id ?? ''; reset(); router.replace({ query: m === 'planned' ? {} : { mode: m } }); loadDrills() })
+async function loadDrills() {
+  if (mode.value !== 'drill' || !topoId.value) return
+  drills.value = await api.operations({ topologyId: topoId.value, type: 'DRILL', limit: 5 }).catch(() => [])
+  policyDays.value = topo.value?.drillMaxAgeDays ?? 90
+}
+watch(topoId, loadDrills)
+async function savePolicy() {
+  error.value = ''
+  try { await api.drillPolicy(topoId.value, policyDays.value); await load() } catch (e) { error.value = (e as Error).message }
+}
 watch(() => session.activeSiteId, load)
-onMounted(load)
+onMounted(() => load().then(loadDrills))
 
 async function check() {
   error.value = ''; busy.value = true
@@ -54,7 +68,9 @@ async function check() {
 async function submit() {
   error.value = ''
   try {
-    const op = mode.value === 'urgent'
+    const op = mode.value === 'drill'
+      ? await api.drill(topoId.value, { targetNodeId: targetId.value, notBefore: when.value ? new Date(when.value).toISOString() : null, topologyConfirmation: confirmation.value })
+      : mode.value === 'urgent'
       ? await api.failover(topoId.value, { targetNodeId: fplan.value?.targetId ?? null, fencingConfirmed: fenced.value, topologyConfirmation: confirmation.value })
       : await api.switchover(topoId.value, { targetNodeId: targetId.value, reattachOldPrimary: reattach.value, topologyConfirmation: confirmation.value })
     router.push({ path: '/operations', query: { op: op.id } })
@@ -81,12 +97,34 @@ const lag = (n: NodeSummary) => n.channels[0]?.lagSeconds ?? null
     <div class="modes" role="tablist">
       <button :class="{ on: mode === 'planned' }" role="tab" @click="mode = 'planned'">Planifiée (primaire en service)</button>
       <button :class="{ on: mode === 'urgent', urgent: true }" role="tab" @click="mode = 'urgent'">Urgence (primaire perdu)</button>
+      <button :class="{ on: mode === 'drill' }" role="tab" @click="mode = 'drill'">Exercice</button>
     </div>
+    <template v-if="mode === 'drill'">
+      <p class="muted">Un exercice vérifie que la reprise fonctionne vraiment, avant d'en avoir besoin : bascule planifiée vers une réplique, puis retour
+        sur le primaire habituel dès qu'il a rattrapé son retard. Aucune vente confirmée n'est perdue, mais les écritures sont interrompues
+        quelques secondes à l'aller et au retour : programmez-le en dehors des heures d'ouverture, et à distance de l'heure des sauvegardes.</p>
+      <div v-if="topo" class="card">
+        <h2>Derniers exercices</h2>
+        <p v-if="!drills.length" class="muted small">Aucun exercice pour cette topologie.</p>
+        <ul class="plain small">
+          <li v-for="d in drills" :key="d.id">
+            <RouterLink :to="{ path: '/operations', query: { op: d.id } }">{{ date(d.finishedAt ?? d.requestedAt) }} — {{ opStatusLabel[d.status] }}</RouterLink>
+            &nbsp;<span class="muted">{{ d.summary }}</span>
+          </li>
+        </ul>
+        <form v-if="canAdmin" class="toolbar" @submit.prevent="savePolicy">
+          <label>Rappel si aucun exercice réussi depuis (jours, 0 = jamais)
+            <input v-model.number="policyDays" type="number" min="0" max="730" style="width: 6em" /></label>
+          <button type="submit">Enregistrer</button>
+        </form>
+        <p v-else class="muted small">Rappel après {{ topo.drillMaxAgeDays }} jours sans exercice réussi.</p>
+      </div>
+    </template>
     <p v-if="mode === 'urgent'" class="muted">À utiliser seulement si le serveur principal est en panne. La réplique la plus avancée reprend le service
       après avoir appliqué tout ce qu'elle a reçu. Les ventes du primaire qu'elle n'a pas reçues sont perdues (la perte estimée est affichée avant validation).
       L'ancien primaire est d'abord isolé pour qu'il ne puisse plus jamais recevoir de ventes, puis devra être reconstruit. Une seconde personne doit approuver.
       Si la console elle-même est inaccessible : <a href="https://github.com/airm5500/prestige-replica/blob/main/docs/procedure-urgence.md" target="_blank">procédure manuelle</a>.</p>
-    <p v-else class="muted">Échange des rôles entre le primaire et une réplique à jour, par exemple pour une maintenance du serveur principal.
+    <p v-else-if="mode === 'planned'" class="muted">Échange des rôles entre le primaire et une réplique à jour, par exemple pour une maintenance du serveur principal.
       Aucune transaction confirmée n'est perdue : la réplique n'est ouverte en écriture qu'après avoir appliqué la dernière transaction de l'ancien primaire.
       Une seconde personne doit approuver.</p>
     <div class="toolbar">
@@ -160,7 +198,24 @@ const lag = (n: NodeSummary) => n.channels[0]?.lagSeconds ?? null
             </tr>
           </tbody>
         </table>
-        <form v-if="plan.ready" class="form" @submit.prevent="submit">
+        <form v-if="plan.ready && mode === 'drill'" class="form" @submit.prevent="submit">
+          <h3>Déroulement de l'exercice</h3>
+          <ol class="small">
+            <li>Aller : {{ plan.oldPrimary }} passe en lecture seule, {{ plan.target }} devient primaire après la dernière transaction, {{ plan.oldPrimary }} est rattaché.</li>
+            <li>Attente du rattrapage de {{ plan.oldPrimary }} (prochain rapport de son agent, au plus 10 minutes).</li>
+            <li>Retour : même opération en sens inverse. {{ plan.oldPrimary }} redevient primaire.</li>
+            <li>Bilan : interruption des écritures à l'aller et au retour, comparée à l'objectif de reprise.</li>
+          </ol>
+          <label>Démarrer à (vide = dès l'approbation)
+            <input v-model="when" type="datetime-local" />
+          </label>
+          <div class="warn-box">Pharmacie <strong>{{ site?.name }}</strong> [{{ site?.code }}] — Prestige sera interrompu quelques secondes deux fois.</div>
+          <label>Pour confirmer, saisissez le nom de la topologie « {{ topo.name }} »
+            <input v-model="confirmation" autocomplete="off" required />
+          </label>
+          <button type="submit" :disabled="confirmation !== topo.name">Demander l'approbation de l'exercice</button>
+        </form>
+        <form v-else-if="plan.ready" class="form" @submit.prevent="submit">
           <h3>Déroulement</h3>
           <ol class="small">
             <li>{{ plan.oldPrimary }} passe en lecture seule ; les connexions de Prestige sont coupées (quelques secondes d'interruption).</li>

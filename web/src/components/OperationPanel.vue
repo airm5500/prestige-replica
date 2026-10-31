@@ -63,6 +63,12 @@ const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '
       Après la bascule, Prestige doit être pointé vers <code>{{ params.newAddress }}</code>.
     </div>
 
+    <div v-if="op.type === 'DRILL'" class="warn-box">
+      <strong>Exercice de bascule de {{ view?.topologyName }}.</strong> Aller vers <code>{{ params.newAddress }}</code> puis retour sur
+      <code>{{ params.oldAddress }}</code>, sans perte ; les écritures de Prestige sont interrompues quelques secondes à chaque sens.
+      <template v-if="params.notBefore"> Démarrage programmé à {{ date(params.notBefore) }}.</template>
+    </div>
+
     <div v-if="op.type === 'FAILOVER'" class="fence-box">
       <strong>Bascule d'urgence de {{ view?.topologyName }} : le primaire est perdu.</strong>
       L'ancien primaire sera isolé (lecture seule ou arrêt du service), puis <code>{{ params.newAddress }}</code> deviendra la source
@@ -83,6 +89,16 @@ const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="op.error" class="error">{{ op.error }}</p>
 
+    <template v-if="op.type === 'DRILL' && result">
+      <h3>Bilan de l'exercice</h3>
+      <dl class="kv">
+        <dt>Interruption à l'aller</dt><dd>{{ seconds(result.outbound?.writeUnavailableMs) }}</dd>
+        <dt>Interruption au retour</dt><dd>{{ result.phase === 2 ? seconds(result.writeUnavailableMs) : '—' }}</dd>
+        <dt>Durée totale</dt><dd>{{ duration(result.totalSeconds) }}</dd>
+        <dt>Primaire à la fin</dt><dd class="mono">{{ result.newPrimary }}</dd>
+        <dt>Ventes confirmées perdues</dt><dd>{{ op.status === 'SUCCEEDED' ? 'aucune (chaque promotion a attendu la dernière transaction)' : '—' }}</dd>
+      </dl>
+    </template>
     <template v-if="(op.type === 'SWITCHOVER' || op.type === 'FAILOVER') && result">
       <h3>Bilan</h3>
       <dl class="kv">
@@ -133,7 +149,7 @@ const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '
         <dt>Clé</dt><dd class="mono">{{ result.manifest.keyId }}</dd>
       </dl>
     </template>
-    <details v-else-if="result && op.type !== 'SWITCHOVER' && op.type !== 'FAILOVER'">
+    <details v-else-if="result && op.type !== 'SWITCHOVER' && op.type !== 'FAILOVER' && op.type !== 'DRILL'">
       <summary>Résultat détaillé</summary>
       <pre class="details">{{ JSON.stringify(result, null, 2) }}</pre>
     </details>

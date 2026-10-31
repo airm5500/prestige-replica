@@ -18,6 +18,10 @@ Conformément à la réponse 7 du 31/10/2026, la bascule reste **manuelle et ass
 - **Garde-fou permanent** : si un serveur isolé redevient accessible en écriture (redémarrage manuel, par exemple), la console le remet en lecture seule dès le rapport suivant de son agent et ouvre un incident critique. Entre-temps, le routeur refuse les connexions.
 - **Procédure sans console** : `prm-agent fence` et `prm-agent promote` sur les serveurs, `prm-agent status` affiche `Gtid_IO_Pos` pour choisir la réplique la plus avancée. Au retour de la console, un administrateur déclare la bascule faite à la main, ce qui aligne l'inventaire et isole l'ancien primaire. Fiche imprimable : [procedure-urgence.md](procedure-urgence.md).
 - Rapport d'opération imprimable pour la bascule d'urgence (perte estimée, durée sans primaire, étapes).
+- **Isolement persistant côté agent** : l'agent d'un serveur isolé garde un marqueur local et le remet en lecture seule dans les 2 secondes s'il redevient accessible en écriture (redémarrage après une coupure de courant, relance manuelle), **même si la console est injoignable**. Une reconstruction réussie lève le marqueur ; `prm-agent unfence` le lève à la main, et `prm-agent status` affiche « ISOLÉ ».
+- **Exercices de panne** (Bascule → onglet Exercice) : bascule planifiée vers une réplique puis retour automatique sur le primaire habituel dès qu'il a rattrapé son retard (au plus 10 minutes d'attente, sinon arrêt sans perte et intervention demandée). L'exercice peut être **programmé** à une heure creuse, avec double validation comme une bascule. Le bilan donne l'interruption à l'aller et au retour. Un **rappel** (incident « aucun exercice réussi depuis N jours », 90 par défaut, réglable ou désactivable par topologie) maintient la procédure éprouvée ; une vraie bascule planifiée réussie compte comme exercice.
+
+![Rapport d'exercice](images/rapport-exercice.png)
 
 ## Vérifié
 
@@ -29,6 +33,8 @@ Laboratoire MariaDB à deux serveurs, agents à 30 s d'intervalle de rapport, Pr
 | Même essai dans l'autre sens | bascule terminée 35 s après la panne, isolement puis promotion réussis |
 | Ancien primaire relancé à la main puis mis en écriture | routeur : « plusieurs serveurs acceptent les écritures », connexions refusées 18 s ; console : remise en lecture seule automatique 21 s après |
 | Reconstruction de l'ancien primaire depuis une sauvegarde vérifiée | isolement levé, réplication repartie (IO/SQL Yes, retard 0) |
+| Serveur isolé relancé puis mis en écriture à la main, console comprise | remis en lecture seule par son agent en **0,2 s** |
+| Exercice aller-retour avec ventes simulées à travers le routeur | réussi en 21 s ; interruption 4,0 s à l'aller et 1,1 s au retour ; **387 ventes confirmées sur 387** présentes |
 | Tests automatisés | 7 scénarios (contrôles, choix de la réplique, perte estimée, échec d'isolement sans effet, bascule complète, remise en lecture seule automatique, déclaration d'une bascule manuelle) ; tests du routeur (routage, refus pendant la bascule, coupure des anciennes connexions, deux primaires, sonde manquée) |
 
 Dans ces essais, les approbations sont scriptées. En réel, le temps de rétablissement est surtout celui des deux personnes : détection (≤ 30 s plus la notification), demande et approbation. L'objectif de moins de 5 minutes reste atteignable si un approbateur est joignable.
@@ -38,4 +44,6 @@ Dans ces essais, les approbations sont scriptées. En réel, le temps de rétabl
 - **Pas de bascule automatique**, par choix (réponse 7). Le routeur ne promeut jamais rien : il suit seulement le serveur que la console ou une personne a promu.
 - Réplication **asynchrone** : les ventes écrites dans les dernières secondes avant une panne brutale peuvent ne pas avoir été reçues. La perte est estimée, pas évitée. Pour la réduire à zéro, il faudrait la réplication semi-synchrone, qui ralentit chaque vente : à décider avec vous.
 - Lors d'un changement de serveur, les transactions en cours sur les connexions coupées sont annulées par MariaDB ; Prestige doit les rejouer (comme après une coupure réseau).
-- **Exercices de panne programmés** et **bascule entre sites** (réplique distante ou cloud promue pour une autre pharmacie) : non livrés. La bascule d'urgence fonctionne déjà vers une réplique distante ou cloud de la même topologie. L'orchestration multi-site et les exercices guidés sont proposés pour un lot suivant.
+- **Exercice de panne brutale** : l'exercice livré est une bascule planifiée aller-retour (sans perte). Simuler une panne brutale en production n'est pas proposé ; la procédure d'urgence est éprouvée au laboratoire et par les tests automatisés.
+- **Multi-site** : une topologie peut déjà mélanger répliques locales, distantes et cloud, et la bascule (planifiée ou d'urgence) fonctionne vers chacune. Il n'y a pas d'orchestration au niveau de plusieurs pharmacies à la fois (par exemple reprise de toutes les pharmacies d'une région sur le cloud).
+- Après une coupure de courant générale, si `read_only=ON` figure dans le `my.ini` du primaire, il redémarre en lecture seule : un administrateur doit le rouvrir (le routeur refuse les connexions en attendant). Recommandation : `read_only=ON` dans le `my.ini` des **répliques seulement**.

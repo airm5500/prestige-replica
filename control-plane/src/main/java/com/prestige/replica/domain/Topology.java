@@ -34,4 +34,7 @@ public class Topology extends PanacheEntityBase {
     /** 1 = lundi … 7 = dimanche. */
     @Column(name = "restore_test_weekday") public int restoreTestWeekday = 7;
     @Column(name = "backup_max_age_hours") public int backupMaxAgeHours = 26;
+
+    /** Lot 4 : rappel si aucun exercice de bascule réussi depuis ce nombre de jours (0 = jamais). */
+    @Column(name = "drill_max_age_days") public int drillMaxAgeDays = 90;
 }
