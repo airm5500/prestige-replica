@@ -1,0 +1,33 @@
+{
+  "controlPlaneUrl": "https://replication.exemple:8443",
+  "agentTokenFile": "C:\\ProgramData\\PrestigeReplicaManager\\agent.token",
+  "mariadb": {
+    "address": "127.0.0.1:3306",
+    "user": "prm_monitor",
+    "passwordFile": "C:\\ProgramData\\PrestigeReplicaManager\\mariadb.password"
+  },
+  "intervalSeconds": 30,
+  "tools": { "binDir": "C:\\Program Files\\MariaDB 10.6\\bin" },
+  "backup": {
+    "enabled": true,
+    "root": "\\\\MINI-SERVEUR\\sauvegardes-prestige",
+    "user": "prm_backup",
+    "passwordFile": "C:\\ProgramData\\PrestigeReplicaManager\\backup.password",
+    "encryptionKeyFile": "C:\\ProgramData\\PrestigeReplicaManager\\backup.key",
+    "parallel": 2
+  },
+  "restoreTest": {
+    "enabled": false,
+    "scratchDir": "D:\\PrestigeRestaurationTest",
+    "bufferPoolMB": 512
+  },
+  "provisioning": {
+    "enabled": false,
+    "dataDir": "C:\\Program Files\\MariaDB 10.6\\data",
+    "serviceName": "MariaDB",
+    "adminUser": "prm_admin",
+    "adminPasswordFile": "C:\\ProgramData\\PrestigeReplicaManager\\admin.password",
+    "replicationUser": "prm_repl",
+    "replicationPasswordFile": "C:\\ProgramData\\PrestigeReplicaManager\\repl.password"
+  }
+}

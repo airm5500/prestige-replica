@@ -194,6 +194,15 @@ public class BackupService {
     /** Constats de supervision des sauvegardes d'une topologie (§5 « Surveillance »). */
     public List<Finding> findings(Topology t, Instant now) {
         List<Finding> out = new ArrayList<>();
+        // Une opération interrompue reste signalée, que la sauvegarde automatique soit active ou non.
+        for (Operation op : Operation.<Operation>list("topologyId = ?1 and status = ?2 and finishedAt > ?3", t.id,
+                OperationStatus.INTERVENTION_REQUIRED, now.minus(Duration.ofDays(7)))) {
+            // Résolue d'elle-même si la même opération a réussi ensuite sur ce nœud.
+            if (Operation.count("nodeId = ?1 and type = ?2 and status = ?3 and finishedAt > ?4", op.nodeId, op.type,
+                    OperationStatus.SUCCEEDED, op.finishedAt) > 0) continue;
+            out.add(new Finding("OPERATION_INTERVENTION", op.id.toString(), Severity.CRITICAL,
+                    op.type.label + " : intervention requise — " + op.summary, op.error));
+        }
         if (!t.backupEnabled) return out;
         Backup lastOk = Backup.find("topologyId = ?1 and status = ?2 ORDER BY startedAt DESC", t.id, Backup.Status.COMPLETED).firstResult();
         if (lastOk == null || lastOk.finishedAt == null || Duration.between(lastOk.finishedAt, now).toHours() >= t.backupMaxAgeHours) {
@@ -217,11 +226,6 @@ public class BackupService {
             if (verified == null || Duration.between(verified.verifiedAt, now).toDays() >= 8) {
                 out.add(new Finding("RESTORE_TEST_STALE", "", Severity.WARNING, "Aucune restauration vérifiée depuis plus de 8 jours", null));
             }
-        }
-        for (Operation op : Operation.<Operation>list("topologyId = ?1 and status = ?2 and finishedAt > ?3", t.id,
-                OperationStatus.INTERVENTION_REQUIRED, now.minus(Duration.ofDays(7)))) {
-            out.add(new Finding("OPERATION_INTERVENTION", op.id.toString(), Severity.CRITICAL,
-                    op.type.label + " : intervention requise — " + op.summary, op.error));
         }
         return out;
     }

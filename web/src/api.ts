@@ -11,6 +11,8 @@ export interface Site { id: string; tenantId: string; code: string; name: string
 export interface Topology {
   id: string; tenantId: string; siteId: string; name: string; mode: string; maintenance: boolean
   lagWarnSeconds: number; lagCritSeconds: number; diskWarnPct: number; diskCritPct: number; agentSilenceSeconds: number
+  backupEnabled: boolean; backupNodeId: string | null; restoreNodeId: string | null; backupHour: number; backupKeep: number
+  restoreTestWeekday: number; backupMaxAgeHours: number
 }
 export interface ChannelView {
   name: string; source: string; ioRunning: string; sqlRunning: string; lagSeconds: number | null; sqlDelay: number
@@ -38,6 +40,34 @@ export interface AuditEvent { id: number; at: string; tenantId: string | null; s
 export interface NodeMetric { collectedAt: string; reachable: boolean; lagSeconds: number | null; ioRunning: boolean | null; sqlRunning: boolean | null; binlogBytes: number | null; relayLogBytes: number | null; minDiskFreePct: number | null; threadsConnected: number | null }
 export interface NotificationChannel { id: string; tenantId: string; siteId: string | null; type: 'EMAIL' | 'WEBHOOK'; target: string; minSeverity: Severity; enabled: boolean }
 export interface UserOut { id: string; username: string; role: string; tenantId: string | null; siteId: string | null; displayName: string | null; enabled: boolean }
+
+export type OperationType = 'PREFLIGHT' | 'BACKUP_FULL' | 'RESTORE_TEST' | 'BACKUP_PRUNE' | 'PROVISION_REPLICA'
+export type OperationStatus = 'AWAITING_APPROVAL' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'INTERVENTION_REQUIRED' | 'CANCELLED'
+export interface Operation {
+  id: string; tenantId: string; siteId: string; topologyId: string | null; nodeId: string; type: OperationType; status: OperationStatus
+  params: unknown; summary: string; requiresApproval: boolean; requestedBy: string; requestedAt: string; approvedBy: string | null
+  approvedAt: string | null; startedAt: string | null; finishedAt: string | null; lastEventAt: string | null; error: string | null; result: unknown
+}
+export interface OperationEvent { id: number; operationId: string; at: string; level: 'INFO' | 'WARN' | 'ERROR'; message: string }
+export interface OperationView { operation: Operation; events: OperationEvent[]; nodeName: string; siteCode: string }
+export interface Backup {
+  id: string; siteId: string; topologyId: string | null; nodeId: string; operationId: string | null; kind: string; relativeDir: string
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'DELETED'; startedAt: string; finishedAt: string | null; sizeBytes: number | null
+  sha256: string | null; keyId: string | null; gtid: string | null; serverVersion: string | null
+  verifyStatus: 'NOT_VERIFIED' | 'VERIFIED' | 'FAILED'; verifiedAt: string | null; restoreSeconds: number | null
+}
+export interface RestoreTest { id: string; backupId: string; operationId: string; nodeId: string; status: string; at: string; totalSeconds: number | null; gtid: string | null; details: unknown }
+export interface BackupPolicy {
+  backupEnabled: boolean; backupNodeId: string | null; restoreNodeId: string | null; backupHour: number; backupKeep: number
+  restoreTestWeekday: number; backupMaxAgeHours: number
+}
+
+/** Les colonnes JSON peuvent arriver sérialisées en texte. */
+export function json<T = any>(v: unknown): T | null {
+  if (v === null || v === undefined || v === '') return null
+  if (typeof v === 'string') { try { return JSON.parse(v) as T } catch { return null } }
+  return v as T
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message) }
@@ -101,4 +131,22 @@ export const api = {
   disableChannel: (id: string) => request<void>('DELETE', `api/v1/notification-channels/${id}`),
   users: () => request<UserOut[]>('GET', 'api/v1/users'),
   createUser: (b: Record<string, unknown>) => request<UserOut>('POST', 'api/v1/users', b),
+
+  // Lot 2 : opérations, sauvegardes, réplique
+  preflight: (nodeId: string) => request<Operation>('POST', `api/v1/nodes/${nodeId}/preflight`),
+  backupNow: (nodeId: string) => request<Operation>('POST', `api/v1/nodes/${nodeId}/backups`),
+  verifyBackup: (backupId: string, nodeId: string | null) => request<Operation>('POST', `api/v1/backups/${backupId}/verify`, { nodeId }),
+  backups: (topologyId?: string) => request<Backup[]>('GET', `api/v1/backups${topologyId ? `?topologyId=${topologyId}` : ''}`),
+  restoreTests: (backupId: string) => request<RestoreTest[]>('GET', `api/v1/backups/${backupId}/restore-tests`),
+  setBackupPolicy: (topologyId: string, b: BackupPolicy) => request<Topology>('PUT', `api/v1/topologies/${topologyId}/backup-policy`, b),
+  provision: (topologyId: string, b: { targetNodeId: string; backupId: string; confirmDataDir: string; delaySeconds: number; topologyConfirmation: string }) =>
+    request<Operation>('POST', `api/v1/topologies/${topologyId}/replicas/provision`, b),
+  operations: (q: { status?: string; nodeId?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams()
+    Object.entries(q).forEach(([k, v]) => { if (v !== undefined && v !== '') p.set(k, String(v)) })
+    return request<Operation[]>('GET', `api/v1/operations?${p}`)
+  },
+  operation: (id: string) => request<OperationView>('GET', `api/v1/operations/${id}`),
+  approve: (id: string, confirmation: string) => request<Operation>('POST', `api/v1/operations/${id}/approve`, { confirmation }),
+  cancelOperation: (id: string) => request<Operation>('POST', `api/v1/operations/${id}/cancel`),
 }

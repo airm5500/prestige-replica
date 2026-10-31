@@ -125,9 +125,10 @@ func (r *Runner) Provision(ctx context.Context, p ProvisionParams, rep Reporter)
 	}
 	rep.Step("configuration GTID et démarrage de la réplication")
 	stmts := []string{
+		// Lecture seule d'abord : la réplique ne doit jamais accepter d'écritures.
+		"SET GLOBAL read_only = ON",
 		"STOP ALL SLAVES",
 		"RESET SLAVE ALL",
-		"SET GLOBAL read_only = ON",
 		"SET GLOBAL gtid_slave_pos = '" + m.GTID + "'",
 		fmt.Sprintf("CHANGE MASTER TO MASTER_HOST=%s, MASTER_PORT=%d, MASTER_USER=%s, MASTER_PASSWORD=%s, MASTER_USE_GTID=slave_pos, MASTER_DELAY=%d, MASTER_CONNECT_RETRY=10",
 			sqlString(p.SourceHost), p.SourcePort, sqlString(pc.ReplicationUser), sqlString(replPw), p.DelaySeconds),

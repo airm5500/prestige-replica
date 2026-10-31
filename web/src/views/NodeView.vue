@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { api, type Incident, type NodeMetric, type NodeSummary, type Site, type Topology } from '../api'
+import { api, type Incident, type NodeMetric, type NodeSummary, type Operation, type Site, type Topology } from '../api'
+import OperationPanel from '../components/OperationPanel.vue'
+import { useSession } from '../stores/session'
 import StatusBadge from '../components/StatusBadge.vue'
 import Sparkline from '../components/Sparkline.vue'
-import { ago, bytes, date, duration, pct, roleLabel } from '../format'
+import { ago, bytes, date, duration, opStatusClass, opStatusLabel, opTypeLabel, pct, roleLabel } from '../format'
 
 const props = defineProps<{ id: string }>()
 const summary = ref<NodeSummary | null>(null)
@@ -14,6 +16,10 @@ const topology = ref<Topology | null>(null)
 const metrics = ref<NodeMetric[]>([])
 const hours = ref(24)
 const error = ref('')
+const ops = ref<Operation[]>([])
+const shownOp = ref('')
+const session = useSession()
+const canOperate = computed(() => session.can('SUPER_ADMIN', 'SITE_ADMIN', 'OPERATOR'))
 let timer: number | undefined
 
 async function load() {
@@ -25,12 +31,19 @@ async function load() {
     site.value = d.site
     topology.value = d.topology
     metrics.value = await api.metrics(props.id, hours.value)
+    ops.value = await api.operations({ nodeId: props.id, limit: 10 })
+    if (!shownOp.value) shownOp.value = ops.value.find((o) => o.type === 'PREFLIGHT')?.id ?? ''
     error.value = ''
   } catch (e) { error.value = (e as Error).message }
 }
 watch(hours, load)
 onMounted(() => { load(); timer = window.setInterval(load, 15_000) })
 onUnmounted(() => window.clearInterval(timer))
+
+async function start(fn: (id: string) => Promise<Operation>) {
+  error.value = ''
+  try { const o = await fn(props.id); shownOp.value = o.id; await load() } catch (e) { error.value = (e as Error).message }
+}
 
 const server = computed(() => report.value?.server ?? null)
 const config = computed(() => {
@@ -60,6 +73,24 @@ const config = computed(() => {
     </p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="!report" class="muted">L'agent n'a encore envoyé aucun rapport.</p>
+    <div v-if="canOperate" class="toolbar">
+      <button @click="start(api.preflight)">Vérifier les prérequis</button>
+      <button @click="start(api.backupNow)">Sauvegarder maintenant</button>
+      <RouterLink to="/backups">Sauvegardes et répliques →</RouterLink>
+    </div>
+
+    <div v-if="ops.length" class="grid2">
+      <div class="card">
+        <h2>Dernières opérations</h2>
+        <ul class="plain">
+          <li v-for="o in ops" :key="o.id">
+            <button class="link" @click="shownOp = o.id">{{ date(o.requestedAt) }} — {{ opTypeLabel[o.type] }}</button>
+            <span class="badge" :class="opStatusClass[o.status]">{{ opStatusLabel[o.status] }}</span>
+          </li>
+        </ul>
+      </div>
+      <OperationPanel v-if="shownOp" :id="shownOp" @changed="load" />
+    </div>
 
     <div v-if="incidents.length" class="card">
       <h2>Incidents ouverts</h2>

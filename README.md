@@ -4,7 +4,7 @@ Application autonome pour **superviser, puis à terme déployer, réparer et aud
 
 L'application pilote les mécanismes natifs de MariaDB (binlog, GTID, `mariadb-backup`) ; elle ne réimplémente jamais la réplication. Si la console s'arrête, la réplication MariaDB continue.
 
-> **État : Lot 1 — observation en lecture seule.** Aucune commande de cette version ne modifie MariaDB. Voir [docs/perimetre-lot1.md](docs/perimetre-lot1.md) pour ce qui est livré, ce qui ne l'est pas encore et les décisions attendues.
+> **État : Lots 1 et 2.** Observation du parc (lecture seule) ; sauvegardes `mariadb-backup` chiffrées et vérifiées par restauration ; construction assistée d'une réplique avec double approbation. Détails : [docs/perimetre-lot1.md](docs/perimetre-lot1.md), [docs/perimetre-lot2.md](docs/perimetre-lot2.md).
 
 ![Accueil du parc](docs/images/parc.png)
 
@@ -13,6 +13,7 @@ L'application pilote les mécanismes natifs de MariaDB (binlog, GTID, `mariadb-b
 | Dossier | Rôle | Technologie |
 |---|---|---|
 | `agent/` | Agent installé près de chaque MariaDB : collecte l'état (threads IO/SQL, retard, GTID, binlogs, configuration, disque) et l'envoie au Control Plane. Liste blanche fermée d'instructions `SHOW`, aucun port ouvert, file bornée hors connexion, CLI de secours `prm-agent status`. | Go, binaire unique Linux/Windows |
+| `agent/internal/ops` | Lot 2 : opérations en liste fermée exécutées par l'agent (prérequis, sauvegarde, restauration de contrôle, construction de réplique, purge), chacune activable localement. | Go |
 | `control-plane/` | API REST, inventaire multi-pharmacies, règles d'alerte, incidents, notifications courriel/webhook, audit append-only chaîné, sondes `/health/*`. | Java 21, Quarkus, PostgreSQL, Flyway |
 | `web/` | Console : parc, fiche nœud, incidents, audit, paramètres. Pharmacie active rappelée en permanence. | Vue 3, TypeScript strict, Vite, Pinia |
 | `deploy/` | Unités `systemd`, installation du service Windows, `docker compose`. | |
@@ -68,4 +69,18 @@ GET  /api/v1/incidents   POST /api/v1/incidents/{id}/acknowledge
 GET  /api/v1/audit  …/export  …/verify
 GET/POST /api/v1/tenants  /sites  /topologies  /users  /notification-channels
 GET  /health/live  /health/ready  /health/startup   /q/metrics
+```
+
+Lot 2 :
+
+```text
+POST /api/v1/nodes/{id}/preflight                  contrôle des prérequis + my.ini recommandé
+POST /api/v1/nodes/{id}/backups                    sauvegarde complète immédiate
+POST /api/v1/backups/{id}/verify                   restauration de contrôle isolée
+GET  /api/v1/backups?topologyId=   …/{id}/restore-tests
+PUT  /api/v1/topologies/{id}/backup-policy         planification, conservation, test hebdomadaire
+POST /api/v1/topologies/{id}/replicas/provision    demande de construction (ressaisie du nom de topologie)
+GET  /api/v1/operations?status=active   GET /api/v1/operations/{id}
+POST /api/v1/operations/{id}/approve  {confirmation: code pharmacie}   POST …/cancel
+GET  /api/v1/agent/jobs   POST /api/v1/agent/jobs/{id}/start|events|finish   (côté agent)
 ```

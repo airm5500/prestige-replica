@@ -48,6 +48,8 @@ onUnmounted(() => window.removeEventListener('prm:unauthorized', onUnauthorized)
       <nav aria-label="Navigation principale">
         <RouterLink to="/">Parc</RouterLink>
         <RouterLink to="/incidents">Incidents</RouterLink>
+        <RouterLink to="/backups">Sauvegardes</RouterLink>
+        <RouterLink to="/operations">Opérations</RouterLink>
         <RouterLink v-if="session.me.role !== 'READ_ONLY'" to="/audit">Audit</RouterLink>
         <RouterLink v-if="session.can('SUPER_ADMIN', 'SITE_ADMIN', 'OPERATOR')" to="/settings">Paramètres</RouterLink>
       </nav>
@@ -66,6 +68,6 @@ onUnmounted(() => window.removeEventListener('prm:unauthorized', onUnauthorized)
       Pharmacie active : <strong>{{ session.activeSite.name }}</strong> — code {{ session.activeSite.code }} — environnement {{ session.activeSite.environment }}
     </div>
     <main class="content"><RouterView /></main>
-    <footer class="foot muted">Lot 1 — observation en lecture seule : aucune action de cette console ne modifie MariaDB.</footer>
+    <footer class="foot muted">Toute action sur MariaDB passe par le centre d'opérations, est exécutée par l'agent local et tracée dans l'audit.</footer>
   </template>
 </template>

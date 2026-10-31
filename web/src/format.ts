@@ -1,4 +1,4 @@
-import type { Health, Severity, NodeRole } from './api'
+import type { Health, Severity, NodeRole, OperationStatus, OperationType } from './api'
 
 export const healthLabel: Record<Health, string> = {
   HEALTHY: 'Sain', DEGRADED: 'Dégradé', CRITICAL: 'Critique', MAINTENANCE: 'Maintenance', UNKNOWN: 'Inconnu',
@@ -41,3 +41,18 @@ export function bytes(n: number | null | undefined): string {
 export function pct(n: number | null | undefined): string {
   return n === null || n === undefined ? '—' : `${n.toFixed(1)} %`
 }
+
+export const opTypeLabel: Record<OperationType, string> = {
+  PREFLIGHT: 'Contrôle des prérequis', BACKUP_FULL: 'Sauvegarde complète', RESTORE_TEST: 'Restauration de contrôle',
+  BACKUP_PRUNE: 'Purge des sauvegardes expirées', PROVISION_REPLICA: "Construction d'une réplique",
+}
+export const opStatusLabel: Record<OperationStatus, string> = {
+  AWAITING_APPROVAL: 'En attente d\'approbation', QUEUED: 'En file', RUNNING: 'En cours', SUCCEEDED: 'Réussie',
+  FAILED: 'Échec', INTERVENTION_REQUIRED: 'Intervention requise', CANCELLED: 'Annulée',
+}
+/** Classe de badge (réutilise les couleurs de santé). */
+export const opStatusClass: Record<OperationStatus, string> = {
+  AWAITING_APPROVAL: 'degraded', QUEUED: 'unknown', RUNNING: 'maintenance', SUCCEEDED: 'healthy',
+  FAILED: 'critical', INTERVENTION_REQUIRED: 'critical', CANCELLED: 'unknown',
+}
+export const weekdayLabel = ['', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']

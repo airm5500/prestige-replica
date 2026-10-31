@@ -129,9 +129,9 @@ func (r *Runner) Preflight(ctx context.Context, p PreflightParams, rep Reporter)
 			if size, err := DirSize(s.DataDir); err == nil {
 				if _, free, err := collector.DiskUsage(r.Cfg.Backup.Root); err == nil {
 					if float64(free) < 1.2*float64(size) {
-						add("backup-space", "FAIL", "Espace libre %d Go sur le stockage pour un datadir de %d Go (1,2 fois requis par sauvegarde)", free>>30, size>>30)
+						add("backup-space", "FAIL", "Espace libre %s sur le stockage pour un datadir de %s (1,2 fois requis par sauvegarde)", gib(free), gib(uint64(size)))
 					} else {
-						add("backup-space", "OK", "Datadir %d Go, espace libre %d Go", size>>30, free>>30)
+						add("backup-space", "OK", "Datadir %s, espace libre %s sur le stockage", gib(uint64(size)), gib(free))
 					}
 				}
 			} else {
@@ -202,4 +202,12 @@ func checkWritable(dir string) error {
 	name := f.Name()
 	f.Close()
 	return os.Remove(filepath.Clean(name))
+}
+
+// gib affiche une taille en Go avec une décimale (ou en Mo sous 1 Go).
+func gib(n uint64) string {
+	if n < 1<<30 {
+		return fmt.Sprintf("%d Mo", n>>20)
+	}
+	return strings.Replace(fmt.Sprintf("%.1f Go", float64(n)/(1<<30)), ".", ",", 1)
 }

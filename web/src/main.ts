@@ -10,6 +10,8 @@ const router = createRouter({
     { path: '/', component: () => import('./views/FleetView.vue') },
     { path: '/nodes/:id', component: () => import('./views/NodeView.vue'), props: true },
     { path: '/incidents', component: () => import('./views/IncidentsView.vue') },
+    { path: '/operations', component: () => import('./views/OperationsView.vue') },
+    { path: '/backups', component: () => import('./views/BackupsView.vue') },
     { path: '/audit', component: () => import('./views/AuditView.vue') },
     { path: '/settings', component: () => import('./views/SettingsView.vue') },
   ],

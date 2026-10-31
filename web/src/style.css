@@ -73,3 +73,17 @@ ul.incidents { padding-left: 1rem; }
 .login { display: grid; place-items: center; min-height: 100vh; }
 .login form { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 2rem; width: min(380px, 92vw); }
 .login button { width: 100%; margin-top: 0.5rem; }
+
+/* Lot 2 */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+@media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+tr.clickable { cursor: pointer; } tr.clickable:hover, tr.selected { background: rgba(37, 99, 235, .08); }
+.warn-box { border-left: 4px solid var(--warn); background: rgba(217, 119, 6, .08); padding: .6rem .8rem; margin: .6rem 0; }
+.form { display: grid; gap: .6rem; } .form label { display: grid; gap: .2rem; }
+.events { list-style: none; padding: 0; max-height: 22rem; overflow: auto; font-size: .9rem; }
+.events li { padding: .15rem 0; border-bottom: 1px solid rgba(127,127,127,.15); }
+.events li.warn { color: var(--warn); } .events li.error { color: var(--crit); }
+.plain { list-style: none; padding: 0; } .plain li { padding: .2rem 0; }
+td.warn, .warn { color: var(--warn); }
+button.danger { background: var(--crit); color: #fff; border-color: var(--crit); }
+button:disabled { opacity: .5; cursor: not-allowed; }
