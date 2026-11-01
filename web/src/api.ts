@@ -14,6 +14,17 @@ export interface Topology {
   backupEnabled: boolean; backupNodeId: string | null; restoreNodeId: string | null; backupHour: number; backupKeep: number
   restoreTestWeekday: number; backupMaxAgeHours: number; drillMaxAgeDays: number
   binlogArchiveEnabled: boolean; binlogArchiveMinutes: number; binlogArchiveNodeId: string | null; binlogGapAt: string | null; binlogGapDetail: string | null
+  consistencyEnabled: boolean; consistencyWeekday: number; consistencyHour: number; consistencyMode: 'FULL' | 'SCHEMA'
+  consistencyDatabases: string | null; consistencyExclude: string | null; consistencyMaxAgeDays: number
+}
+export interface ConsistencyNode {
+  nodeId: string; node: string; status: 'NONE' | 'OK' | 'DIVERGENT' | 'INCONCLUSIVE' | 'FAILED' | 'REBUILT' | 'UNKNOWN'
+  last: Operation | null; lastOkAt: string | null; rebuiltSince: boolean
+}
+export interface ConsistencyOverview { replicas: ConsistencyNode[]; running: Operation | null }
+export interface ConsistencyPolicy {
+  consistencyEnabled: boolean; consistencyWeekday: number; consistencyHour: number; consistencyMode: 'FULL' | 'SCHEMA'
+  consistencyDatabases: string; consistencyExclude: string; consistencyMaxAgeDays: number
 }
 export interface ChannelView {
   name: string; source: string; ioRunning: string; sqlRunning: string; lagSeconds: number | null; sqlDelay: number
@@ -46,7 +57,7 @@ export interface UserOut { id: string; username: string; role: string; tenantId:
 
 export type OperationType = 'PREFLIGHT' | 'BACKUP_FULL' | 'RESTORE_TEST' | 'BACKUP_PRUNE' | 'PROVISION_REPLICA'
   | 'REPLICATION_PAUSE' | 'REPLICATION_RESUME' | 'SWITCHOVER' | 'SWITCHOVER_DEMOTE' | 'SWITCHOVER_PROMOTE' | 'SWITCHOVER_UNDO' | 'REPLICA_ATTACH' | 'FAILOVER' | 'FENCE' | 'DRILL'
-  | 'BINLOG_ARCHIVE' | 'PITR_RESTORE' | 'BINLOG_SEARCH'
+  | 'BINLOG_ARCHIVE' | 'PITR_RESTORE' | 'BINLOG_SEARCH' | 'CONSISTENCY_CHECK'
 export type OperationStatus = 'AWAITING_APPROVAL' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'INTERVENTION_REQUIRED' | 'CANCELLED'
 export interface Operation {
   id: string; tenantId: string; siteId: string; topologyId: string | null; nodeId: string; type: OperationType; status: OperationStatus
@@ -205,6 +216,10 @@ export const api = {
     request<void>('POST', `api/v1/topologies/${topologyId}/failover/declare-manual`, b),
   binlogPolicy: (topologyId: string, b: { binlogArchiveEnabled: boolean; binlogArchiveNodeId: string | null; binlogArchiveMinutes: number }) =>
     request<Topology>('PUT', `api/v1/topologies/${topologyId}/binlog-policy`, b),
+  consistency: (topologyId: string) => request<ConsistencyOverview>('GET', `api/v1/topologies/${topologyId}/consistency`),
+  consistencyCheck: (nodeId: string, b: { mode: 'FULL' | 'SCHEMA'; startAfter?: string | null }) =>
+    request<Operation>('POST', `api/v1/nodes/${nodeId}/consistency-check`, b),
+  consistencyPolicy: (topologyId: string, b: ConsistencyPolicy) => request<Topology>('PUT', `api/v1/topologies/${topologyId}/consistency-policy`, b),
   binlogs: (topologyId: string) => request<BinlogCatalog>('GET', `api/v1/topologies/${topologyId}/binlogs`),
   pitrPlan: (topologyId: string, stopAt: string) => request<PitrPlan>('POST', `api/v1/topologies/${topologyId}/pitr/plan`, { stopAt }),
   binlogSearch: (topologyId: string, b: { from: string; to: string; databases: string[]; tables: string[]; types: string[]; text: string; reason: string }) =>

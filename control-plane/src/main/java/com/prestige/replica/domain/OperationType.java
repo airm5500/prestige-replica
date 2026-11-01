@@ -30,6 +30,8 @@ public enum OperationType {
     BINLOG_ARCHIVE(false, "Archivage des journaux binaires"),
     /** Lecture seule de l'archive : vue d'audit des transactions (qui a modifié quoi, quand). */
     BINLOG_SEARCH(false, "Recherche dans les journaux binaires"),
+    /** Lecture seule des deux côtés ; jamais de correction automatique (§7). */
+    CONSISTENCY_CHECK(false, "Contrôle de cohérence avec le primaire"),
     /** Ne touche jamais la production : instance isolée, extraction chiffrée. */
     PITR_RESTORE(false, "Restauration à un instant précis (isolée)");
 

@@ -223,3 +223,26 @@ Les sauvegardes complètes sont quotidiennes. Pour revenir **à la seconde près
 Les journaux archivés antérieurs à la plus ancienne sauvegarde conservée sont supprimés automatiquement.
 
 La page **Journaux** cherche dans cette archive (qui a supprimé ou modifié quoi, et quand) avec le même agent : rien de plus à installer. Garder `binlog_annotate_row_events=ON` (valeur par défaut) sur le primaire pour voir la requête d'origine de chaque changement.
+
+## 10. Contrôles de cohérence primaire / réplique
+
+Une réplique peut s'écarter du primaire sans que la réplication s'arrête : écriture directe sur la réplique, erreur ignorée, restauration partielle. Le contrôle compare **le schéma puis les données**, table par table, par tranches de clé primaire. Il **ne modifie rien** : en cas d'écart, la console propose de reconstruire la réplique depuis une sauvegarde vérifiée (§5.5).
+
+1. **Compte de lecture**, créé sur le primaire (il est répliqué) :
+   ```sql
+   CREATE USER 'prm_check'@'%' IDENTIFIED BY '<mot de passe long>';
+   GRANT SELECT, SHOW VIEW ON prestige.* TO 'prm_check'@'%';
+   -- une ligne GRANT par base à comparer ; ajouter ce qui suit pour comparer aussi procédures et événements :
+   GRANT SELECT ON mysql.proc TO 'prm_check'@'%';
+   ```
+   Restreindre l'hôte (`'prm_check'@'192.168.1.%'`) si possible. Supprimer les comptes anonymes s'il en reste (`SELECT user, host FROM mysql.user WHERE user = ''` puis `DROP USER ''@'localhost'`) : ils prennent le pas sur `prm_check` lors de la connexion locale.
+2. Sur **chaque réplique** à contrôler, dans `agent.json` :
+   ```json
+   "consistencyCheck": { "enabled": true, "user": "prm_check", "passwordFile": "C:\\ProgramData\\PrestigeReplicaManager\\check.password" }
+   ```
+   L'agent de la réplique se connecte à sa base locale et au primaire (adresse de l'inventaire) : la réplique doit joindre le primaire sur le port MariaDB, ce qui est déjà le cas pour la réplication.
+3. Console → **Cohérence** : **Contrôler** (schéma et données) ou **Schéma seul**, et **Modifier** pour planifier un contrôle hebdomadaire (jour et heure de la pharmacie, bases, exclusions « base.table » ou « base.* », âge maximal avant alerte).
+
+**Charge.** Lectures par tranches de 1 000 lignes, avec une pause égale au temps de lecture (débit divisé par deux). Sur le laboratoire : 227 000 lignes en 4 s sans écart. Planifier la nuit pour une base de plusieurs millions de lignes ; le contrôle s'arrête au bout de 4 heures et peut être **repris** à la table suivante.
+
+**Tables très actives.** Les tranches qui changent pendant la lecture sont relues après que la réplique a rattrapé le primaire (`MASTER_GTID_WAIT`) ; si elles changent encore, elles sont marquées « non concluant » plutôt que signalées à tort.

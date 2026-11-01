@@ -29,6 +29,7 @@ public class OperationResource {
     @Inject AuditService audit;
     @Inject ReplicationService replication;
     @Inject com.prestige.replica.service.BinlogService binlogs;
+    @Inject com.prestige.replica.service.ConsistencyService consistency;
 
     public record ApproveIn(@NotBlank String confirmation) {}
     public record RestoreTestIn(UUID nodeId) {}
@@ -51,6 +52,11 @@ public class OperationResource {
                          com.prestige.replica.service.BinlogService.StopPoint stopBefore) {}
     public record BinlogCatalog(List<com.prestige.replica.domain.BinlogArchive> files, java.time.Instant coveredFrom, java.time.Instant coveredUntil,
                                 long totalBytes, java.time.Instant gapAt, String gapDetail, Operation lastRun) {}
+    public record ConsistencyIn(@Pattern(regexp = "FULL|SCHEMA") String mode, @Size(max = 129) String startAfter) {}
+    public record ConsistencyPolicyIn(boolean consistencyEnabled, @Min(1) @Max(7) int consistencyWeekday, @Min(0) @Max(23) int consistencyHour,
+                                      @NotNull @Pattern(regexp = "FULL|SCHEMA") String consistencyMode, @Size(max = 2000) String consistencyDatabases,
+                                      @Size(max = 4000) String consistencyExclude, @Min(0) @Max(365) int consistencyMaxAgeDays) {}
+    public record ConsistencyOverview(List<com.prestige.replica.service.ConsistencyService.NodeStatus> replicas, Operation running) {}
     public record SwitchoverIn(@NotNull UUID targetNodeId, boolean reattachOldPrimary, @NotBlank String topologyConfirmation) {}
 
     static final String[] OPERATORS = {Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN};
@@ -128,6 +134,44 @@ public class OperationResource {
         audit.record(me.username(), "BINLOG_POLICY_UPDATE", "topology:" + t.id, "SUCCESS", t.tenantId, t.siteId,
                 "archivage=" + t.binlogArchiveEnabled + ", toutes les " + t.binlogArchiveMinutes + " min");
         return t;
+    }
+
+    // ---- Contrôles de cohérence (§7) ---------------------------------------
+
+    @POST @Path("/nodes/{id}/consistency-check") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.OPERATOR, Roles.SITE_ADMIN})
+    public Operation consistencyCheck(@PathParam("id") UUID id, @Valid ConsistencyIn in) {
+        DatabaseNode n = node(id);
+        return consistency.request(n, in == null ? null : in.mode(), in == null ? null : in.startAfter(), me.username());
+    }
+
+    @PUT @Path("/topologies/{id}/consistency-policy") @Transactional @RolesAllowed({Roles.SUPER_ADMIN, Roles.SITE_ADMIN})
+    public Topology consistencyPolicy(@PathParam("id") UUID id, @Valid ConsistencyPolicyIn in) {
+        Topology t = topology(id);
+        List<String> dbs = com.prestige.replica.service.ConsistencyService.split(in.consistencyDatabases());
+        List<String> ex = com.prestige.replica.service.ConsistencyService.split(in.consistencyExclude());
+        com.prestige.replica.service.ConsistencyService.validateLists(dbs, ex);
+        t.consistencyEnabled = in.consistencyEnabled();
+        t.consistencyWeekday = in.consistencyWeekday();
+        t.consistencyHour = in.consistencyHour();
+        t.consistencyMode = in.consistencyMode();
+        t.consistencyDatabases = dbs.isEmpty() ? null : String.join(", ", dbs);
+        t.consistencyExclude = ex.isEmpty() ? null : String.join(", ", ex);
+        t.consistencyMaxAgeDays = in.consistencyMaxAgeDays();
+        audit.record(me.username(), "CONSISTENCY_POLICY_UPDATE", "topology:" + t.id, "SUCCESS", t.tenantId, t.siteId,
+                "contrôle=" + t.consistencyEnabled + ", jour " + t.consistencyWeekday + " à " + t.consistencyHour + " h, mode " + t.consistencyMode);
+        return t;
+    }
+
+    @GET @Path("/topologies/{id}/consistency") @Transactional
+    public ConsistencyOverview consistencyOverview(@PathParam("id") UUID id) {
+        Topology t = topology(id);
+        List<com.prestige.replica.service.ConsistencyService.NodeStatus> out = new java.util.ArrayList<>();
+        for (DatabaseNode n : DatabaseNode.<DatabaseNode>list("topologyId = ?1 and expectedRole <> ?2 ORDER BY name", t.id, com.prestige.replica.domain.NodeRole.PRIMARY)) {
+            out.add(consistency.status(n));
+        }
+        Operation running = Operation.find("topologyId = ?1 and type = ?2 and status in ?3 ORDER BY requestedAt DESC", t.id,
+                OperationType.CONSISTENCY_CHECK, List.of(com.prestige.replica.domain.OperationStatus.QUEUED, com.prestige.replica.domain.OperationStatus.RUNNING)).firstResult();
+        return new ConsistencyOverview(out, running);
     }
 
     @GET @Path("/topologies/{id}/binlogs") @Transactional

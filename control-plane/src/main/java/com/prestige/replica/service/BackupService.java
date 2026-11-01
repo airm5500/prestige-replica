@@ -238,7 +238,7 @@ public class BackupService {
         return out;
     }
 
-    static ZoneId zone(Site s) {
+    public static ZoneId zone(Site s) {
         try {
             return s == null ? ZoneOffset.UTC : ZoneId.of(s.timezone);
         } catch (DateTimeException e) {

@@ -4,7 +4,7 @@ Application autonome pour **superviser, puis à terme déployer, réparer et aud
 
 L'application pilote les mécanismes natifs de MariaDB (binlog, GTID, `mariadb-backup`) ; elle ne réimplémente jamais la réplication. Si la console s'arrête, la réplication MariaDB continue.
 
-> **État : Lots 1 à 4.** Observation du parc (lecture seule) ; sauvegardes `mariadb-backup` chiffrées et vérifiées par restauration ; construction assistée d'une réplique ; pause/reprise, réparation guidée et bascule planifiée sans perte avec double approbation et rapport d'opération ; routeur de connexion (adresse fixe pour Prestige), bascule d'urgence assistée avec isolement persistant de l'ancien primaire, exercices de panne programmables, procédure sans console ; archivage continu et chiffré des journaux binaires, explorateur des journaux (qui a modifié quoi, quand, valeurs avant/après) et restauration à un instant précis ou juste avant une transaction, dans une instance isolée. Détails : [lot 1](docs/perimetre-lot1.md), [lot 2](docs/perimetre-lot2.md), [lot 3](docs/perimetre-lot3.md), [lot 4](docs/perimetre-lot4.md), [restauration à un instant](docs/perimetre-restauration-instant.md). En cas de panne : [procédure d'urgence](docs/procedure-urgence.md).
+> **État : Lots 1 à 4.** Observation du parc (lecture seule) ; sauvegardes `mariadb-backup` chiffrées et vérifiées par restauration ; construction assistée d'une réplique ; pause/reprise, réparation guidée et bascule planifiée sans perte avec double approbation et rapport d'opération ; routeur de connexion (adresse fixe pour Prestige), bascule d'urgence assistée avec isolement persistant de l'ancien primaire, exercices de panne programmables, procédure sans console ; archivage continu et chiffré des journaux binaires, explorateur des journaux (qui a modifié quoi, quand, valeurs avant/après) et restauration à un instant précis ou juste avant une transaction, dans une instance isolée ; contrôles de cohérence primaire/réplique (schéma et données), planifiés ou à la demande. Détails : [lot 1](docs/perimetre-lot1.md), [lot 2](docs/perimetre-lot2.md), [lot 3](docs/perimetre-lot3.md), [lot 4](docs/perimetre-lot4.md), [restauration à un instant](docs/perimetre-restauration-instant.md), [cohérence](docs/perimetre-coherence.md). En cas de panne : [procédure d'urgence](docs/procedure-urgence.md).
 
 ![Accueil du parc](docs/images/parc.png)
 
@@ -106,4 +106,12 @@ POST /api/v1/topologies/{id}/pitr/plan  {stopAt}   contrôles et fichiers à rej
 POST /api/v1/topologies/{id}/pitr  {stopAt, extract[], reason, stopBefore?}
 POST /api/v1/topologies/{id}/binlog-search  {from, to, databases[], tables[], types[], text, reason}
 prm-agent decrypt -config agent.json -in <fichier.prmseal> -out <fichier>   (CLI)
+```
+
+Contrôles de cohérence :
+
+```text
+POST /api/v1/nodes/{id}/consistency-check  {mode: FULL|SCHEMA, startAfter?}   sur une réplique
+PUT  /api/v1/topologies/{id}/consistency-policy                                planification hebdomadaire, bases, exclusions
+GET  /api/v1/topologies/{id}/consistency                                       état de chaque réplique
 ```

@@ -115,6 +115,15 @@ func (r *Runner) Execute(ctx context.Context, j Job, rep Reporter) (map[string]a
 			return nil, err
 		}
 		return r.ArchiveBinlogs(ctx, p, rep)
+	case TypeConsistencyCheck:
+		if !r.Cfg.ConsistencyCheck.Enabled {
+			return nil, errors.New("contrôles de cohérence non activés localement (consistencyCheck.enabled)")
+		}
+		var p ConsistencyParams
+		if err := decode(j.Params, &p); err != nil {
+			return nil, err
+		}
+		return r.CheckConsistency(ctx, p, rep)
 	case TypeBinlogSearch:
 		if !r.Cfg.BinlogArchive.Enabled {
 			return nil, errors.New("archive des journaux non activée localement (binlogArchive.enabled)")

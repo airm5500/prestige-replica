@@ -36,6 +36,7 @@ public class ReplicationService {
     @Inject OperationService ops;
     @Inject MonitoringService monitoring;
     @Inject AuditService audit;
+    @Inject jakarta.enterprise.inject.Instance<ConsistencyService> consistency;
 
     public record Check(String id, String status, String message) {}
 
@@ -225,6 +226,8 @@ public class ReplicationService {
             }
         }
         if (ro != null && ro.server() != null && ro.server().readOnly()) checks.add(warn("old-read-only", "Le primaire est déjà en lecture seule"));
+        String div = consistency.get().divergence(target);
+        if (div != null) checks.add(warn("target-consistency", div + " : la nouvelle source ne serait pas une copie fidèle"));
         if (t.backupEnabled || t.backupNodeId != null) {
             Backup v = Backup.find("topologyId = ?1 and verifyStatus = ?2 ORDER BY verifiedAt DESC", t.id, Backup.Verify.VERIFIED).firstResult();
             if (v == null || Duration.between(v.verifiedAt, now).toDays() >= 8) checks.add(warn("backup", "Aucune sauvegarde vérifiée depuis 8 jours"));
@@ -637,6 +640,8 @@ public class ReplicationService {
         } else {
             checks.add(ok("target", target.name + " est la réplique la plus avancée (position reçue " + rt.channelsOrEmpty().get(0).gtidIoPos() + ")"));
         }
+        String div = consistency.get().divergence(target);
+        if (div != null) checks.add(warn("target-consistency", div));
         String loss;
         // Dernière position connue du primaire : son dernier rapport, sinon la dernière mesure où MariaDB répondait.
         String lastPos = ro == null || ro.server() == null ? null : ro.server().gtidBinlogPos();

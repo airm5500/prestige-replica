@@ -36,6 +36,11 @@ public class IncidentService {
 
     @Transactional(Transactional.TxType.MANDATORY)
     public void reconcile(Scope scope, List<Finding> findings, Instant now) {
+        // Deux rapports (ou un rapport et l'évaluation périodique) peuvent rapprocher le même périmètre en
+        // même temps : verrou de transaction PostgreSQL par périmètre, sinon chacun crée l'incident et le
+        // second échoue sur l'index unique (HTTP 500, rapport renvoyé par l'agent).
+        HealthIncident.getEntityManager().createNativeQuery("SELECT pg_advisory_xact_lock(hashtext(?1))")
+                .setParameter(1, scope.prefix()).getSingleResult();
         List<HealthIncident> open = HealthIncident.list("dedupKey like ?1 and status <> ?2", scope.prefix() + "%", IncidentStatus.RESOLVED);
         Map<String, HealthIncident> byKey = new HashMap<>();
         open.forEach(i -> byKey.put(i.dedupKey, i));

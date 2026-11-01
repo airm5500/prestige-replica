@@ -46,4 +46,16 @@ public class Topology extends PanacheEntityBase {
     /** Fichiers purgés sur la source avant archivage : pas de restauration à un instant dans cet intervalle. */
     @Column(name = "binlog_gap_at") public Instant binlogGapAt;
     @Column(name = "binlog_gap_detail") public String binlogGapDetail;
+
+    // Contrôles de cohérence (§7)
+    @Column(name = "consistency_enabled") public boolean consistencyEnabled;
+    /** 1 = lundi … 7 = dimanche, heure de la pharmacie. */
+    @Column(name = "consistency_weekday") public int consistencyWeekday = 7;
+    @Column(name = "consistency_hour") public int consistencyHour = 4;
+    @Column(name = "consistency_mode") public String consistencyMode = "FULL";
+    /** Bases à comparer, séparées par des virgules (vide = toutes sauf système). */
+    @Column(name = "consistency_databases") public String consistencyDatabases;
+    /** Exclusions « base.table » ou « base.* », séparées par des virgules. */
+    @Column(name = "consistency_exclude") public String consistencyExclude;
+    @Column(name = "consistency_max_age_days") public int consistencyMaxAgeDays = 30;
 }

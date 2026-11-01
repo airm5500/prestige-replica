@@ -36,6 +36,8 @@ async function act(fn: () => Promise<unknown>) {
 const approve = () => act(() => api.approve(props.id, confirmation.value))
 const cancel = () => act(() => api.cancelOperation(props.id))
 const copy = (t: string) => navigator.clipboard?.writeText(t)
+const consistencyText: Record<string, string> = { OK: 'La réplique est identique au primaire', DIVERGENT: 'La réplique diffère du primaire',
+  INCONCLUSIVE: 'Contrôle non concluant (tables trop actives)', INCOMPLETE: 'Contrôle interrompu avant la fin (durée maximale)' }
 const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '—' : `${(ms / 1000).toFixed(1).replace('.', ',')} s`)
 </script>
 
@@ -148,6 +150,18 @@ const seconds = (ms: number | undefined) => (ms === undefined || ms === null ? '
         <dt>Empreinte SHA-256</dt><dd class="mono small">{{ result.manifest.sha256 }}</dd>
         <dt>Clé</dt><dd class="mono">{{ result.manifest.keyId }}</dd>
       </dl>
+    </template>
+    <template v-else-if="result && op.type === 'CONSISTENCY_CHECK'">
+      <h3>Contrôle de cohérence</h3>
+      <p :class="result.status === 'OK' ? 'ok' : result.status === 'DIVERGENT' ? 'ko' : 'warn'">{{ consistencyText[result.status] ?? result.status }}</p>
+      <dl class="kv" v-if="result.summary">
+        <dt>Tables comparées</dt><dd>{{ result.summary.tablesChecked }} ({{ (result.rows ?? 0).toLocaleString('fr-FR') }} lignes)</dd>
+        <dt>Tables différentes</dt><dd>{{ result.summary.divergentTables }}</dd>
+        <dt>Différences de schéma</dt><dd>{{ result.summary.schemaDifferences }}</dd>
+        <dt>Non concluantes / ignorées</dt><dd>{{ result.summary.inconclusiveTables }} / {{ result.summary.skippedTables }}</dd>
+        <dt>Durée</dt><dd>{{ duration(result.totalSeconds) }}</dd>
+      </dl>
+      <p><RouterLink :to="{ path: '/coherence', query: { op: op.id } }">Voir le détail dans la page Cohérence →</RouterLink></p>
     </template>
     <template v-else-if="op.type === 'BINLOG_SEARCH'">
       <p v-if="result && !result.purged">{{ result.total }} transaction(s) trouvée(s), {{ result.rows }} ligne(s) ou instruction(s).</p>

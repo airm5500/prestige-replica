@@ -55,5 +55,10 @@
     "passwordFile": "C:\\ProgramData\\PrestigeReplicaManager\\mariadb.password",
     "probeIntervalMs": 1000,
     "failuresBeforeDown": 2
+  },
+  "consistencyCheck": {
+    "enabled": false,
+    "user": "prm_check",
+    "passwordFile": "C:\\ProgramData\\PrestigeReplicaManager\\check.password"
   }
 }

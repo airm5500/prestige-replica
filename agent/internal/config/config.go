@@ -47,6 +47,8 @@ type Config struct {
 	ReplicationControl ReplicationControlConfig `json:"replicationControl"`
 	// Archivage continu des binlogs du primaire (restauration à un instant précis).
 	BinlogArchive BinlogArchiveConfig `json:"binlogArchive"`
+	// Contrôles de cohérence primaire / réplique (§7) : lecture seule, compte dédié.
+	ConsistencyCheck ConsistencyCheckConfig `json:"consistencyCheck"`
 	// Lot 4 : routeur de connexion (adresse stable pour Prestige).
 	Router router.Config `json:"router"`
 	// StateDir : état local persistant (marqueur d'isolement). Défaut : dossier du fichier de configuration.
@@ -86,6 +88,15 @@ type BackupConfig struct {
 	EncryptionKeyFile string `json:"encryptionKeyFile"`
 	// Parallel : threads de copie de mariadb-backup (défaut 2).
 	Parallel int `json:"parallel"`
+}
+
+// ConsistencyCheckConfig : l'agent d'une réplique compare son schéma et ses
+// données à ceux du primaire. Compte dédié en lecture seule (SELECT, SHOW VIEW),
+// créé sur le primaire et répliqué. Jamais aucune correction automatique.
+type ConsistencyCheckConfig struct {
+	Enabled      bool   `json:"enabled"`
+	User         string `json:"user"`
+	PasswordFile string `json:"passwordFile"`
 }
 
 // BinlogArchiveConfig : l'agent (en général celui du serveur de sauvegarde)
@@ -224,6 +235,9 @@ func (c *Config) Validate() error {
 	if c.RestoreTest.Enabled && (c.RestoreTest.ScratchDir == "" || c.Backup.Root == "" || c.Backup.EncryptionKeyFile == "") {
 		return errors.New("restoreTest : scratchDir, backup.root et backup.encryptionKeyFile sont obligatoires")
 	}
+	if c.ConsistencyCheck.Enabled && (c.ConsistencyCheck.User == "" || c.ConsistencyCheck.PasswordFile == "") {
+		return errors.New("consistencyCheck : user et passwordFile sont obligatoires (compte en lecture seule)")
+	}
 	if c.BinlogArchive.Enabled && (c.Backup.Root == "" || c.Backup.EncryptionKeyFile == "") {
 		return errors.New("binlogArchive : backup.root et backup.encryptionKeyFile sont obligatoires")
 	}
@@ -272,6 +286,9 @@ func (c *Config) Capabilities() []string {
 	}
 	if c.ReplicationControl.Enabled {
 		out = append(out, "replicationControl")
+	}
+	if c.ConsistencyCheck.Enabled {
+		out = append(out, "consistencyCheck")
 	}
 	if c.BinlogArchive.Enabled {
 		out = append(out, "binlogArchive")

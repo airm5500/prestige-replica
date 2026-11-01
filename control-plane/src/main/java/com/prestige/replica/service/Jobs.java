@@ -18,6 +18,7 @@ public class Jobs {
     @Inject OperationService operations;
     @Inject ReplicationService replication;
     @Inject BinlogService binlogs;
+    @Inject ConsistencyService consistency;
 
     @ConfigProperty(name = "prm.operations.stale-after", defaultValue = "PT2H")
     java.time.Duration staleAfter;
@@ -38,6 +39,7 @@ public class Jobs {
         replication.expireFence(Instant.now());
         backups.schedule(Instant.now());
         binlogs.schedule(Instant.now());
+        consistency.schedule(Instant.now());
     }
 
     @Scheduled(every = "${prm.drill.interval:5s}", delayed = "15s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)

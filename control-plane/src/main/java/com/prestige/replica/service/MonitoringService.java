@@ -35,6 +35,7 @@ public class MonitoringService {
     @Inject jakarta.enterprise.inject.Instance<BackupService> backups;
     @Inject jakarta.enterprise.inject.Instance<ReplicationService> replication;
     @Inject jakarta.enterprise.inject.Instance<BinlogService> binlogs;
+    @Inject jakarta.enterprise.inject.Instance<ConsistencyService> consistency;
 
     @Transactional
     public int ingest(UUID nodeId, List<AgentReport> reports) {
@@ -139,6 +140,7 @@ public class MonitoringService {
             f.addAll(backups.get().findings(topo, now));
             f.addAll(replication.get().drillFindings(topo, now));
             f.addAll(binlogs.get().findings(topo, now));
+            f.addAll(consistency.get().findings(topo, now));
         }
         incidents.reconcile(IncidentService.Scope.topology(topo.tenantId, topo.siteId, topo.id), f, now);
     }
