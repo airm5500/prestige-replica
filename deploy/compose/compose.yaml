@@ -1,5 +1,5 @@
 # docker compose -f deploy/compose/compose.yaml --env-file deploy/compose/.env up -d
-# La console est servie en HTTP sur 127.0.0.1:8080 : placez un reverse proxy TLS devant
+# La console est servie en HTTP sur 127.0.0.1:8090 : placez un reverse proxy TLS devant
 # pour tout accès distant (§11 « Conteneurs »).
 services:
   postgres:
@@ -27,7 +27,8 @@ services:
       PRM_BOOTSTRAP_ADMIN_PASSWORD: ${PRM_BOOTSTRAP_ADMIN_PASSWORD:-}
       PRM_SMTP_HOST: ${PRM_SMTP_HOST:-127.0.0.1}
       PRM_MAIL_FROM: ${PRM_MAIL_FROM:-prm@localhost}
-    ports: ["127.0.0.1:8080:8080"]
+    # Port choisi pour ne pas gêner Prestige (8080). Autre port côté poste : PRM_PORT=8095 dans .env.
+    ports: ["127.0.0.1:${PRM_PORT:-8090}:8090"]
 
 volumes:
   pgdata:

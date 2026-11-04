@@ -1,5 +1,5 @@
 {
-  "controlPlaneUrl": "https://replication.exemple:8443",
+  "controlPlaneUrl": "https://replication.exemple:8493",
   "agentTokenFile": "C:\\ProgramData\\PrestigeReplicaManager\\agent.token",
   "mariadb": {
     "address": "127.0.0.1:3306",

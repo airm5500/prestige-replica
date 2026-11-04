@@ -30,7 +30,7 @@ func TestRejectsPlainHTTP(t *testing.T) {
 	if err == nil {
 		t.Fatal("http distant doit être refusé")
 	}
-	if _, err := Load(write(t, `{"controlPlaneUrl":"http://127.0.0.1:8080","agentTokenFile":"x"}`)); err != nil {
+	if _, err := Load(write(t, `{"controlPlaneUrl":"http://127.0.0.1:8090","agentTokenFile":"x"}`)); err != nil {
 		t.Fatalf("http loopback doit être accepté: %v", err)
 	}
 }

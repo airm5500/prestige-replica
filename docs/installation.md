@@ -22,9 +22,9 @@ GRANT REPLICATION CLIENT, PROCESS, SHOW DATABASES ON *.* TO 'prm_monitor'@'local
 3. Fournir un runtime Java 21 privé dans `/opt/prestige-replica-manager/runtime/` (en attendant le paquet `jlink`/`jpackage`, une copie d'un JRE 21 convient).
 4. Copier `deploy/systemd/control-plane.env.example` vers `/etc/prestige-replica-manager/control-plane.env` (mode `0600`, propriétaire `prm`) et le compléter. Le mot de passe d'amorçage n'est utilisé qu'au premier démarrage : retirez-le ensuite.
 5. `cp deploy/systemd/prestige-replica-manager.service /etc/systemd/system/ && systemctl enable --now prestige-replica-manager`.
-6. Vérifier : `curl -k https://127.0.0.1:8443/health/ready`.
+6. Vérifier : `curl -k https://127.0.0.1:8493/health/ready`.
 
-Par défaut la console n'écoute que sur `127.0.0.1`. Pour un accès réseau, définir `PRM_HTTP_HOST`, un certificat TLS (`PRM_TLS_CERT`/`PRM_TLS_KEY`) et `PRM_INSECURE_REQUESTS=disabled`.
+Ports par défaut : **8090** (HTTP) et **8493** (HTTPS), choisis pour ne pas gêner Prestige, qui utilise déjà 8080. Pour d'autres ports : `PRM_HTTP_PORT` et `PRM_HTTPS_PORT` (et adapter `controlPlaneUrl` dans `agent.json`). Par défaut la console n'écoute que sur `127.0.0.1`. Pour un accès réseau, définir `PRM_HTTP_HOST`, un certificat TLS (`PRM_TLS_CERT`/`PRM_TLS_KEY`) et `PRM_INSECURE_REQUESTS=disabled`.
 
 **TLS mutuel des agents** : `PRM_TLS_CLIENT_AUTH=REQUEST`, `PRM_TLS_CLIENT_CA=<truststore des certificats d'agent>` puis `PRM_AGENT_REQUIRE_CLIENT_CERT=true`. Le jeton reste exigé en plus du certificat.
 

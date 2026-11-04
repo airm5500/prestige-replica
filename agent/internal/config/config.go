@@ -17,7 +17,7 @@ import (
 
 // Config est la configuration complète de l'agent.
 type Config struct {
-	// ControlPlaneURL, par ex. https://replication.exemple:8443. Vide = mode
+	// ControlPlaneURL, par ex. https://replication.exemple:8493. Vide = mode
 	// autonome (CLI uniquement, aucun envoi).
 	ControlPlaneURL string `json:"controlPlaneUrl"`
 	// AgentTokenFile contient le jeton délivré à l'enregistrement du nœud.
