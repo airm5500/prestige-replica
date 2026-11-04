@@ -1,5 +1,5 @@
 {
-  "controlPlaneUrl": "https://replication.exemple:8493",
+  "controlPlaneUrl": "https://replication.exemple:9443",
   "agentTokenFile": "/etc/prestige-replica-manager/agent.token",
   "tls": {
     "caFile": "/etc/prestige-replica-manager/ca.pem",

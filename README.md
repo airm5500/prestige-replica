@@ -37,7 +37,7 @@ SKIP_TESTS=1 scripts/build-all.sh
 # 4. Control Plane
 export PRM_DB_PASSWORD=... PRM_SESSION_KEY=$(openssl rand -hex 24) PRM_BOOTSTRAP_ADMIN_PASSWORD='un-mot-de-passe-long'
 java -jar control-plane/target/quarkus-app/quarkus-run.jar
-# → http://127.0.0.1:8090 (compte « admin »)
+# → http://127.0.0.1:9080 (compte « admin »)
 ```
 
 Dans la console : **Paramètres** → créer l'organisation, la pharmacie, la topologie, puis enregistrer chaque serveur MariaDB. Le jeton affiché une seule fois va dans le fichier `agentTokenFile` de l'agent :
