@@ -19,7 +19,7 @@ RUN addgroup -S prm && adduser -S -G prm -H prm
 WORKDIR /opt/prm
 COPY --from=build --chown=prm:prm /src/control-plane/target/quarkus-app/ ./
 USER prm
-EXPOSE 9080 9443
+EXPOSE 9090 9443
 ENV PRM_HTTP_HOST=0.0.0.0
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s CMD wget -qO- http://127.0.0.1:9080/health/live || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s CMD wget -qO- http://127.0.0.1:9090/health/live || exit 1
 ENTRYPOINT ["java", "-XX:+ExitOnOutOfMemoryError", "-jar", "quarkus-run.jar"]
