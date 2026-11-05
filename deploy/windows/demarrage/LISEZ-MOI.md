@@ -68,6 +68,16 @@ Une fois ce premier essai réussi, envoyez une capture de la page Parc. On activ
 3. la réplique ;
 4. le routeur et les bascules.
 
+## Récupérer les bases d'un PC mort (disque branché sur un autre PC)
+
+Si le PC MariaDB ne démarre plus mais que son disque est lisible : brancher le disque sur un autre PC, puis, dans PowerShell en administrateur, dans ce dossier :
+
+```powershell
+.\4-recuperer-disque.ps1 -Source "E:\Program Files\MariaDB 10.6\data"
+```
+
+(remplacer `E:` et `10.6` par ce que vous voyez dans l'Explorateur). Le script ne modifie jamais le disque d'origine, travaille sur une copie dans `C:\Recuperation\<date>`, essaie toutes les méthodes de récupération l'une après l'autre et ouvre un rapport en français. À la fin, `resultat\restauration-complete.sql` se restaure sur le nouveau serveur : `mariadb -u root -p < restauration-complete.sql`. Détails : `docs/recuperation-fichiers.md`.
+
 ## En cas de problème
 
 - **La console ne s'ouvre pas** : services Windows (`services.msc`), vérifier que *Prestige Replica Manager - Console* est démarré. Le journal se trouve dans `C:\ProgramData\PrestigeReplicaManager\console\logs`.

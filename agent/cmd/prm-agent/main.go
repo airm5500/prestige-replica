@@ -52,6 +52,10 @@ CLI de secours (fonctionne sans console, avec la configuration locale) :
   prm-agent restore-test -config agent.json -dir <chemin relatif sous backup.root>
   prm-agent decrypt -config agent.json -in <fichier .prmseal> -out <fichier>   déchiffre une extraction ou un binlog archivé
 
+Récupération à partir des fichiers d'un serveur mort (sans configuration, voir docs/recuperation-fichiers.md) :
+  prm-agent recover -source <dossier data> -work <dossier de travail> -out <dossier résultat> [-bin <bin MariaDB>]
+  prm-agent recover -source <dossier data> -out <dossier> -diagnostic     inventaire et diagnostic seuls
+
 Urgence, console injoignable (voir docs/procedure-urgence.md) :
   prm-agent fence   -config agent.json      isole CE serveur (lecture seule, connexions coupées)
   prm-agent promote -config agent.json      promeut CETTE réplique après application de tout ce qu'elle a reçu
@@ -65,6 +69,9 @@ func main() {
 		os.Exit(2)
 	}
 	cmd := os.Args[1]
+	if cmd == "recover" {
+		os.Exit(recoverCmd(os.Args[2:]))
+	}
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	cfgPath := fs.String("config", defaultConfigPath(), "fichier de configuration JSON")
 	asJSON := fs.Bool("json", false, "sortie JSON (status)")
