@@ -22,7 +22,7 @@ if (-not (Get-Service $svc -ErrorAction SilentlyContinue)) {
 }
 
 # ACL : seuls SYSTEM, Administrateurs et le compte du service lisent la configuration et les secrets.
-icacls $DataDir /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" "NT SERVICE\${svc}:(OI)(CI)R" | Out-Null
+icacls $DataDir /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "NT SERVICE\${svc}:(OI)(CI)R" | Out-Null
 
 Write-Host "Placez agent.json, agent.token et mariadb.password dans $DataDir puis : Start-Service $svc"
 Write-Host "Vérification : & `"$InstallDir\prm-agent.exe`" check -config `"$DataDir\agent.json`""
