@@ -41,7 +41,7 @@ if ($Diagnostic) { $cmdArgs += "-diagnostic" } else { $cmdArgs += @("-work", $wo
 if ($Bin -ne "") { $cmdArgs += @("-bin", $Bin) }
 
 Write-Host "Récupération en cours, cela peut durer longtemps sur une grosse base. Ne pas fermer cette fenêtre." -ForegroundColor Cyan
-& $agent @args
+& $agent @cmdArgs
 $code = $LASTEXITCODE
 
 $rapport = Join-Path $out "RAPPORT.txt"
