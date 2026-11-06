@@ -1,0 +1,17 @@
+{
+  "controlPlaneUrl": "https://replication.exemple:9443",
+  "agentTokenFile": "/etc/prestige-replica-manager/agent.token",
+  "tls": {
+    "caFile": "/etc/prestige-replica-manager/ca.pem",
+    "certFile": "/etc/prestige-replica-manager/agent.pem",
+    "keyFile": "/etc/prestige-replica-manager/agent.key"
+  },
+  "mariadb": {
+    "address": "unix:/run/mysqld/mysqld.sock",
+    "user": "prm_monitor",
+    "passwordFile": "/etc/prestige-replica-manager/mariadb.password"
+  },
+  "intervalSeconds": 30,
+  "bufferSize": 2880,
+  "extraDiskPaths": []
+}

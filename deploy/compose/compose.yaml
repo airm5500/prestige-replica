@@ -1,0 +1,34 @@
+# docker compose -f deploy/compose/compose.yaml --env-file deploy/compose/.env up -d
+# La console est servie en HTTP sur 127.0.0.1:9090 : placez un reverse proxy TLS devant
+# pour tout accès distant (§11 « Conteneurs »).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: prm
+      POSTGRES_USER: prm
+      POSTGRES_PASSWORD: ${PRM_DB_PASSWORD:?définir PRM_DB_PASSWORD}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prm -d prm"]
+      interval: 10s
+      retries: 6
+
+  control-plane:
+    build: { context: ../.., dockerfile: deploy/compose/Dockerfile }
+    restart: unless-stopped
+    depends_on: { postgres: { condition: service_healthy } }
+    environment:
+      PRM_DB_URL: jdbc:postgresql://postgres:5432/prm
+      PRM_DB_USER: prm
+      PRM_DB_PASSWORD: ${PRM_DB_PASSWORD}
+      PRM_SESSION_KEY: ${PRM_SESSION_KEY:?définir PRM_SESSION_KEY}
+      PRM_BOOTSTRAP_ADMIN_PASSWORD: ${PRM_BOOTSTRAP_ADMIN_PASSWORD:-}
+      PRM_SMTP_HOST: ${PRM_SMTP_HOST:-127.0.0.1}
+      PRM_MAIL_FROM: ${PRM_MAIL_FROM:-prm@localhost}
+    # Port choisi pour ne pas gêner Prestige (8080). Autre port côté poste : PRM_PORT=9091 dans .env.
+    ports: ["127.0.0.1:${PRM_PORT:-9090}:9090"]
+
+volumes:
+  pgdata:
